@@ -1,0 +1,96 @@
+[
+  {
+    "id": 1,
+    "name": "Relevante básico - Suministro claro",
+    "input": "Suministro de 45 ventanas de aluminio con DVH para edificio del Ministerio de Educación",
+    "expected": {
+      "es_relevante": true,
+      "confianza_min": 90
+    }
+  },
+  {
+    "id": 2,
+    "name": "NO Relevante - Exclusión explícita",
+    "input": "Remodelación de edificio escolar. Las ventanas de aluminio existentes NO se reemplazan",
+    "expected": {
+      "es_relevante": false,
+      "confianza_min": 85
+    }
+  },
+  {
+    "id": 3,
+    "name": "NO Relevante - Verbo inadecuado (limpieza)",
+    "input": "Limpieza y mantenimiento de ventanas de aluminio en oficinas ministeriales",
+    "expected": {
+      "es_relevante": false,
+      "confianza_min": 85
+    }
+  },
+  {
+    "id": 4,
+    "name": "Relevante - Verbo implícito (renovación)",
+    "input": "Renovación completa de todas las aberturas del edificio cambiando a aluminio",
+    "expected": {
+      "es_relevante": true,
+      "confianza_min": 85
+    }
+  },
+  {
+    "id": 5,
+    "name": "NO Relevante - Contexto incorrecto (pintura)",
+    "input": "Suministro de pintura especial para protección de marcos de aluminio existentes",
+    "expected": {
+      "es_relevante": false,
+      "confianza_min": 80
+    }
+  },
+  {
+    "id": 6,
+    "name": "Relevante - Baja confianza (DVH ambiguo)",
+    "input": "Instalación de vidrios DVH en complejo hospitalario",
+    "expected": {
+      "es_relevante": true,
+      "confianza_min": 40,
+      "confianza_max": 70
+    }
+  },
+  {
+    "id": 7,
+    "name": "Relevante - Parseo de fechas completo",
+    "input": "Suministro de 30 puertas de aluminio. Apertura: 15 de noviembre de 2025. Visita técnica obligatoria: 5 de noviembre de 2025",
+    "expected": {
+      "es_relevante": true,
+      "fecha_apertura": "15/11/2025",
+      "fecha_visita": "05/11/2025",
+      "tiene_visita_obligatoria": true
+    }
+  },
+  {
+    "id": 8,
+    "name": "NO Relevante - Material principal incorrecto",
+    "input": "Suministro de ventanas de madera con herrajes decorativos de aluminio",
+    "expected": {
+      "es_relevante": false,
+      "confianza_min": 85
+    }
+  },
+  {
+    "id": 9,
+    "name": "Relevante - Material mixto pero incluye aluminio",
+    "input": "Suministro de aberturas: 20 ventanas de madera y 10 puertas de aluminio con DVH",
+    "expected": {
+      "es_relevante": true,
+      "confianza_min": 70
+    }
+  },
+  {
+    "id": 10,
+    "name": "Relevante - Curtain wall",
+    "input": "Instalación de fachada curtain wall en aluminio para edificio corporativo. Presupuesto: U$S 150,000",
+    "expected": {
+      "es_relevante": true,
+      "confianza_min": 95,
+      "presupuesto_estimado": "U$S 150,000"
+    }
+  }
+]

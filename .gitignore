@@ -1,0 +1,107 @@
+# ======================================================
+# 🧠 ARCE-LICITACIONES-IA - .gitignore
+# Proyecto de análisis de pliegos estatales con IA (Ollama + n8n)
+# ======================================================
+
+# --- 🔒 Archivos sensibles y de entorno ---
+.env
+*.env
+*.env.local
+*.key
+*.secret
+*.pem
+
+# --- ⚙️ Archivos de configuración locales ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
+*.lock
+*.log
+*.pid
+*.cache
+*.temp
+__pycache__/
+*.pyc
+
+# --- 🧱 Salidas del modelo y datos pesados ---
+/ollama-dev/results/
+/ollama-dev/tests/pliegos-tests/
+/ollama-dev/tests/test-real-pdfs/
+/ollama-dev/tests/test-runners/__pycache__/
+/ollama-dev/models/__pycache__/
+
+# --- 📦 Archivos de datos grandes ---
+*.pdf
+*.doc
+*.docx
+*.odt
+*.xls
+*.xlsx
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.jsonl
+*.sqlite
+*.db
+
+# --- ✅ Excepciones: ejemplos públicos permitidos ---
+!ollama-dev/IA-answer-examples/
+!ollama-dev/IA-answer-examples/*.pdf
+!ollama-dev/IA-answer-examples/*.txt
+
+# --- 🐳 Docker ---
+# ✅ Versionar estos archivos de configuración (forman parte del proyecto)
+!docker-compose*.yml
+!Dockerfile
+!.dockerignore
+
+# ❌ Ignorar contenido generado por los contenedores (runtime)
+docker/volumes/
+docker/logs/
+docker/tmp/
+docker/data/
+docker/cache/
+
+# --- 💻 n8n y flujos ---
+/n8n/.n8n/
+/n8n/.n8n-storage/
+/n8n/executions/
+/n8n/backups/
+/n8n/tmp/
+
+# --- 🧩 IDEs y editores ---
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# --- 🧪 Testing y entornos virtuales ---
+/tests/__pycache__/
+/coverage/
+/reports/
+/.venv/
+/venv/
+/node_modules/
+/__pycache__/
+
+# --- 🔧 Archivos temporales o de respaldo ---
+*.sh~
+*.old
+*.orig
+*.rej
+*.tmp
+*.bak
+
+# ======================================================
+# ✅ Mantener públicos solo:
+#    - código fuente
+#    - documentación
+#    - ejemplos IA controlados
+# ======================================================
+
