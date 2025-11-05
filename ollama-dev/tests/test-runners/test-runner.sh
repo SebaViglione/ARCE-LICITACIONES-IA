@@ -10,9 +10,9 @@ HOST_IP="192.168.56.1"          # IP del host Windows (VirtualBox Host-Only)
 PORT="11434"
 REMOTE_URL="http://$HOST_IP:$PORT/api/generate"
 LOCAL_URL="http://127.0.0.1:$PORT/api/generate"
-SYSTEM_PROMPT_FILE="$HOME/ollama-dev/prompts/system-prompt.txt"
-TEST_CASES_FILE="$HOME/ollama-dev/tests/test-cases.json"
-RESULTS_DIR="$HOME/ollama-dev/results"
+SYSTEM_PROMPT_FILE="$HOME/ARCE-LICITACIONES-IA/ollama-dev/prompts/system-prompt.txt"
+TEST_CASES_FILE="$HOME/ARCE-LICITACIONES-IA/ollama-dev/tests/test-cases/test-cases.json"
+RESULTS_DIR="$HOME/ARCE-LICITACIONES-IA/ollama-dev/results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RESULTS_FILE="$RESULTS_DIR/test_results_${TIMESTAMP}.json"
 
