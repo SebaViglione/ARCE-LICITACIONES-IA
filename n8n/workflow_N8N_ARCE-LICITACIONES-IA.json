@@ -1,0 +1,537 @@
+{
+  "name": "ARCE-LICITACIONES-IA Extraccion de datos (CON SCRIPT BASH)",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -944,
+        -560
+      ],
+      "id": "52865265-a197-4507-ac8e-f9e589b87cc8",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "jsCode": "const hoy = new Date();\nconst hace60 = new Date(hoy);\nhace60.setDate(hoy.getDate() - 60);\n\nfunction fmt(d) {\n  const y = d.getFullYear();\n  const m = String(d.getMonth() + 1).padStart(2, '0');\n  const day = String(d.getDate()).padStart(2, '0');\n  return `${y}-${m}-${day}`;\n}\n\nconst desde = `${fmt(hace60)}%2B00:00:00`;\nconst hasta = `${fmt(hoy)}%2B23:59:59`;\n\nreturn [\n  {\n    json: {\n      rango: `${desde}_${hasta}`,\n      url: `https://www.comprasestatales.gub.uy/consultas/rss/tipo-pub/ALL/tipo-fecha/PUB/orden/ORD_PUB/tipo-orden/DESC/rango-fecha/${desde}_${hasta}`\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -464
+      ],
+      "id": "aec4707f-97ce-4854-9f2d-860bddd660ea",
+      "name": "Generar rango fechas URL"
+    },
+    {
+      "parameters": {
+        "url": "={{$json[\"url\"]}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "es-UY,es;q=0.9"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.comprasestatales.gub.uy/consultas"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -496,
+        -464
+      ],
+      "id": "dc2be6df-caf5-4765-9e6b-a72dd2bd8e8e",
+      "name": "RSS Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -464
+      ],
+      "id": "de1a17fc-3871-4483-8ef6-fa232028a1f2",
+      "name": "Convertir XML a JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recibe lo que venga del XML node\nconst input = $input.all().map((x) => x.json);\n\nfunction clean(text) {\n  return String(text || \"\")\n    .replace(/<br\\s*\\/?>/gi, \" | \")\n    .replace(/&nbsp;/g, \" \")\n    .replace(/&sol;/g, \"/\")\n    .replace(/&Uacute;/g, \"Ú\")\n    .replace(/&Oacute;/g, \"Ó\")\n    .replace(/&Iacute;/g, \"Í\")\n    .replace(/&Eacute;/g, \"É\")\n    .replace(/&Aacute;/g, \"Á\")\n    .replace(/&Ntilde;/g, \"Ñ\")\n    .replace(/&ntilde;/g, \"ñ\")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\nfunction extractFechaHoraApertura(descLimpia) {\n  const re = /Recepci(?:ó|o)n de ofertas hasta:\\s*([0-3]?\\d\\/[01]?\\d\\/\\d{4})\\s+(\\d{2}:\\d{2})\\s*h?s?/i;\n  const m = descLimpia.match(re);\n  if (!m) return { fecha_apertura: null, hora_apertura: null };\n  const [, ddmmyyyy, hhmm] = m;\n  const [dd, mm, yyyy] = ddmmyyyy.split(\"/\").map(Number);\n  const fecha = `${yyyy}-${String(mm).padStart(2, \"0\")}-${String(dd).padStart(2, \"0\")}`;\n  return { fecha_apertura: fecha, hora_apertura: hhmm };\n}\n\nfunction splitPubDate(pubDate) {\n  if (!pubDate) return { fecha_publicacion: null, hora_publicacion: null };\n  const d = new Date(pubDate);\n  const yyyy = d.getFullYear();\n  const mm = String(d.getMonth() + 1).padStart(2, \"0\");\n  const dd = String(d.getDate()).padStart(2, \"0\");\n  const hh = String(d.getHours()).padStart(2, \"0\");\n  const mi = String(d.getMinutes()).padStart(2, \"0\");\n  return {\n    fecha_publicacion: `${yyyy}-${mm}-${dd}`,\n    hora_publicacion: `${hh}:${mi}`,\n  };\n}\n\nlet itemsRaw = [];\nif (input.length === 1 && input[0]?.rss?.channel?.item) {\n  itemsRaw = Array.isArray(input[0].rss.channel.item) ? input[0].rss.channel.item : [input[0].rss.channel.item];\n} else {\n  itemsRaw = input;\n}\n\nconst out = itemsRaw.map((src) => {\n  const title = src.title ?? src?.json?.title ?? \"\";\n  const link = src.link ?? src?.json?.link ?? \"\";\n  const pub = src.pubDate ?? src?.json?.pubDate ?? \"\";\n  const descHtml = src.description ?? src[\"content:encoded\"] ?? src?.json?.description ?? \"\";\n\n  const descLimpia = clean(descHtml);\n  const { fecha_apertura, hora_apertura } = extractFechaHoraApertura(descLimpia);\n  const { fecha_publicacion, hora_publicacion } = splitPubDate(pub);\n\n  let id = null;\n  const match = link.match(/id\\/([A-Za-z0-9]+)/i);\n  if (match) id = match[1];\n\n  return {\n    json: {\n      id,\n      titulo: clean(title),\n      descripcion: descLimpia,\n      fecha_apertura,\n      hora_apertura,\n      fecha_publicacion,\n      hora_publicacion,\n      url_detalle: link,\n    },\n  };\n});\n\nout.forEach((item) => {\n  if (!item.json.id) {\n    const base = item.json.url_detalle || item.json.titulo || \"sin_id\";\n    item.json.id = Buffer.from(base).toString(\"base64\").slice(0, 10);\n  }\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        -464
+      ],
+      "id": "d35c50b2-9f8d-400f-938b-cb6b187a961a",
+      "name": "Formateo JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const keywords = [\"aluminio\", \"aberturas\", \"abertura\", \"ventana\", \"ventanas\", \"dvh\", \"blindex\", \"mampara\", \"mamparas\", \"vidrio\", \"vidrios\", \"cerramiento\", \"cerramientos\", \"fachada\", \"fachadas\", \"marco\", \"marcos\", \"puerta\", \"puertas\", \"carpintería metálica\", \"carpintería de aluminio\", \"estructura metálica\", \"reja\", \"rejas\", \"baranda\", \"barandas\", \"barandilla\", \"barandillas\", \"panel\", \"paneles\", \"cerramiento de obra\", \"muro cortina\", \"colocación de vidrios\", \"instalación de aberturas\", \"suministro de aberturas\", \"suministro de ventanas\", \"mantenimiento edilicio\", \"obra edilicia\", \"obras menores\", \"reparación edilicia\", \"sustitución de cubierta\", \"reforma edilicia\"];\n\nconst exclude = [\"curvispina\", \"pez\", \"peces\", \"animal\", \"animales\", \"insecto\", \"papel\", \"papelería\", \"bolígrafo\", \"resma\", \"sobre\", \"sobres\", \"impresión\", \"uniforme\", \"ropa\", \"textil\", \"camisa\", \"pantalón\", \"zapato\", \"calzado\", \"software\", \"computadora\", \"notebook\", \"monitor\", \"impresora\", \"sistema\", \"pantalla\", \"teclado\", \"mause\", \"tecnología\", \"electrónica\", \"alimento\", \"comida\", \"pan\", \"leche\", \"fruta\", \"verdura\", \"queso\", \"catering\", \"vianda\", \"pollo\", \"carne\", \"pescado\", \"aceite\", \"azúcar\", \"médico\", \"médica\", \"hospitalario\", \"medicamento\", \"farmacéutico\", \"inyección\", \"laboratorio\", \"quirúrgico\", \"jeringa\", \"cubierta\", \"cubiertas\", \"neumático\", \"neumáticos\", \"llanta\", \"vehículo\", \"camión\", \"escenario\", \"escenarios\", \"evento\", \"festival\", \"carpa\", \"led\", \"iluminación\", \"luz\", \"eléctrico\", \"eléctrica\", \"cable\", \"sobres con ventana\", \"ventana de sobre\", \"marco de pizarra\", \"pizarra\"];\n\nfunction esRelevante(item) {\n  const texto = `${item.titulo} ${item.descripcion}`.toLowerCase();\n  const hoy = new Date();\n  hoy.setHours(0, 0, 0, 0);\n  const apertura = item.fecha_apertura ? new Date(item.fecha_apertura) : null;\n  const tieneClave = keywords.some((k) => texto.includes(k.toLowerCase()));\n  const tieneExclusion = exclude.some((k) => texto.includes(k.toLowerCase()));\n  const aperturaValida = apertura && apertura >= hoy;\n  return tieneClave && !tieneExclusion && aperturaValida;\n}\n\nfunction diasHasta(fechaStr) {\n  if (!fechaStr) return null;\n  const hoy = new Date();\n  hoy.setHours(0, 0, 0, 0);\n  const fecha = new Date(fechaStr);\n  const diff = (fecha - hoy) / (1000 * 60 * 60 * 24);\n  return Math.floor(diff);\n}\n\nconst items = $input.all().map((x) => x.json);\n\nconst relevantes = items\n  .filter(esRelevante)\n  .map((i) => {\n    const dias = diasHasta(i.fecha_apertura);\n    let urgencia;\n    if (dias === null) urgencia = \"desconocida\";\n    else if (dias <= 3) urgencia = \"urgente\";\n    else if (dias <= 7) urgencia = \"próximo\";\n    else if (dias <= 15) urgencia = \"atención\";\n    else urgencia = \"futuro\";\n    return { json: { ...i, dias_restantes: dias, urgencia } };\n  })\n  .sort((a, b) => {\n    const da = new Date(`${a.json.fecha_publicacion}T${a.json.hora_publicacion}`);\n    const db = new Date(`${b.json.fecha_publicacion}T${b.json.hora_publicacion}`);\n    return db - da;\n  });\n\nreturn relevantes;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        112
+      ],
+      "id": "6d990139-5ad6-4f3d-8636-ed0ecb41cae6",
+      "name": "Filtro Candidatos"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  try {\n    const data = JSON.parse(item.json.stdout || \"{}\");\n    return {\n      json: {\n        id: data.id,\n        aclaraciones: data.aclaraciones || [],\n        archivos_adjuntos: data.archivos_adjuntos || [],\n        items_extraidos: data.items_extraidos || []\n      }\n    };\n  } catch (e) {\n    return { json: { error: e.message, raw: item.json.stdout } };\n  }\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        16
+      ],
+      "id": "914c429a-cb64-4ea8-ad52-afe053374410",
+      "name": "Limpiar respuesta scrapper"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=node /home/n8n/ARCE-LICITACIONES-IA/arce-scraper/scrape_arce.js {{$json[\"url_detalle\"]}} {{$json[\"id\"]}}\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        16
+      ],
+      "id": "7ec07b55-17f1-4aab-962f-dad8b82447ac",
+      "name": "Arce Scraper"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -464,
+        96
+      ],
+      "id": "41890866-778d-4419-b2da-4be67f4d3e21",
+      "name": "Merge Aclaraciones y Adjuntos + Llamados"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO aclaraciones (id_llamado, fecha, hora, texto, archivo_url, actualizado_en)\nVALUES ('{{ $json[\"id_llamado\"] }}', '{{ $json[\"fecha\"] }}', '{{ $json[\"hora\"] }}', '{{ $json[\"texto\"] }}', '{{ $json[\"archivo_url\"] }}', now())\nON CONFLICT (id_llamado, archivo_url)\nDO UPDATE SET fecha = EXCLUDED.fecha, hora = EXCLUDED.hora, texto = EXCLUDED.texto, actualizado_en = now();\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        -16
+      ],
+      "id": "362b1e30-8d05-4979-97f1-8cb9e98dac7e",
+      "name": "Insert rows in \"aclaraciones\"",
+      "credentials": {
+        "postgres": {
+          "id": "FAtWKqtgMm7rzbZi",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO llamados (id, titulo, descripcion, fecha_publicacion, hora_publicacion, fecha_apertura, hora_apertura, url_detalle, dias_restantes, urgencia, detectado_en)\nVALUES ('{{ $json[\"id\"] }}', '{{ $json[\"titulo\"] }}', '{{ $json[\"descripcion\"] }}', '{{ $json[\"fecha_publicacion\"] }}', '{{ $json[\"hora_publicacion\"] }}', '{{ $json[\"fecha_apertura\"] }}', '{{ $json[\"hora_apertura\"] }}', '{{ $json[\"url_detalle\"] }}', {{ $json[\"dias_restantes\"] || 0 }}, '{{ $json[\"urgencia\"] }}', now())\nON CONFLICT (id)\nDO UPDATE SET titulo = EXCLUDED.titulo, descripcion = EXCLUDED.descripcion, fecha_publicacion = EXCLUDED.fecha_publicacion, hora_publicacion = EXCLUDED.hora_publicacion, fecha_apertura = EXCLUDED.fecha_apertura, hora_apertura = EXCLUDED.hora_apertura, url_detalle = EXCLUDED.url_detalle, dias_restantes = EXCLUDED.dias_restantes, urgencia = EXCLUDED.urgencia, detectado_en = now();\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -240,
+        -208
+      ],
+      "id": "28f1b139-3d4b-4722-9f6e-8d341d38ae0d",
+      "name": "Insert rows to \"llamados\"",
+      "credentials": {
+        "postgres": {
+          "id": "FAtWKqtgMm7rzbZi",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO archivos_adjuntos (llamado_id, nombre, tipo, archivo_url, label, actualizado_en)\nVALUES ('{{ $json[\"id_llamado\"] }}', '{{ $json[\"nombre\"] }}', '{{ $json[\"tipo\"] }}', '{{ $json[\"archivo_url\"] }}', '{{ $json[\"label\"] }}', now())\nON CONFLICT (llamado_id, archivo_url)\nDO UPDATE SET nombre = EXCLUDED.nombre, tipo = EXCLUDED.tipo, label = EXCLUDED.label, actualizado_en = now();\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        176
+      ],
+      "id": "2c1dacd3-5c99-4e3c-8e80-3d20318750c1",
+      "name": "Insert rows to \"archivos_adjuntos\"",
+      "credentials": {
+        "postgres": {
+          "id": "FAtWKqtgMm7rzbZi",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceItems = $items(\"Merge Aclaraciones y Adjuntos + Llamados\");\nconst output = [];\n\nfunction limpiarNombre(nombre) {\n  if (!nombre) return null;\n  return String(nombre)\n    .replace(/\\s+/g, '')\n    .replace(/\\n/g, '')\n    .replace(/\\r/g, '')\n    .trim();\n}\n\nfor (const item of sourceItems) {\n  const idLlamado = item.json.id;\n  const adjuntos = item.json.archivos_adjuntos || [];\n  for (const adj of adjuntos) {\n    output.push({\n      json: {\n        id_llamado: idLlamado,\n        nombre: limpiarNombre(adj.nombre),\n        tipo: adj.tipo ?? null,\n        archivo_url: adj.archivo_url ?? null,\n        label: adj.label ?? null,\n      },\n    });\n  }\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        176
+      ],
+      "id": "e9b40a85-795a-46df-9bf8-23250753433a",
+      "name": "Expandir Adjuntos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceItems = $items(\"Merge Aclaraciones y Adjuntos + Llamados\");\nconst output = [];\n\nfor (const item of sourceItems) {\n  const idLlamado = item.json.id;\n  const aclaraciones = item.json.aclaraciones || [];\n  for (const acl of aclaraciones) {\n    output.push({\n      json: {\n        id_llamado: idLlamado,\n        fecha: acl.fecha ?? null,\n        hora: acl.hora ?? null,\n        texto: acl.texto ?? null,\n        archivo_url: acl.archivo_url ?? null,\n      },\n    });\n  }\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -16
+      ],
+      "id": "463a0f91-f0be-4fe5-8bae-7dc55f794313",
+      "name": "Expandir Aclaraciones"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE llamados SET estado = 'vencido' WHERE fecha_apertura < NOW() AND estado = 'activo';\nDELETE FROM llamados WHERE estado = 'vencido' AND fecha_apertura < NOW() - INTERVAL '120 days';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -720,
+        -656
+      ],
+      "id": "6283648e-f8cf-4e35-9b9e-cbdf3b13147b",
+      "name": "Eliminar ya vencidos de la BD",
+      "credentials": {
+        "postgres": {
+          "id": "FAtWKqtgMm7rzbZi",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO items_llamado (id_llamado, texto) VALUES ('{{ $json[\"id_llamado\"] }}', '{{ $json[\"texto\"] }}') ON CONFLICT DO NOTHING;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        368
+      ],
+      "id": "13571133-eaf5-4642-b9fe-dc5d7277014b",
+      "name": "Insert rows to \"items_llamados\"",
+      "credentials": {
+        "postgres": {
+          "id": "FAtWKqtgMm7rzbZi",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceItems = $items(\"Merge Aclaraciones y Adjuntos + Llamados\");\nconst output = [];\n\nfor (const item of sourceItems) {\n  const id_llamado = item.json.id;\n  const itemsExtraidos = item.json.items_extraidos || [];\n  for (const texto of itemsExtraidos) {\n    if (texto && typeof texto === 'string') {\n      output.push({ json: { id_llamado, texto } });\n    }\n  }\n}\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        368
+      ],
+      "id": "3b454028-9925-4600-998b-be29ba22204f",
+      "name": "Expandir items_llamado"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const keywords = [\"aluminio\", \"aberturas\", \"abertura\", \"ventana\", \"ventanas\", \"dvh\", \"blindex\", \"mampara\", \"mamparas\", \"vidrio\", \"vidrios\", \"cerramiento\", \"cerramientos\", \"fachada\", \"fachadas\", \"marco\", \"marcos\", \"puerta\", \"puertas\", \"carpintería metálica\", \"carpintería de aluminio\", \"estructura metálica\", \"reja\", \"rejas\", \"baranda\", \"barandas\", \"barandilla\", \"barandillas\", \"panel\", \"paneles\", \"cerramiento de obra\", \"muro cortina\", \"colocación de vidrios\", \"instalación de aberturas\", \"suministro de aberturas\", \"suministro de ventanas\", \"mantenimiento edilicio\", \"obra edilicia\", \"obras menores\", \"reparación edilicia\", \"sustitución de cubierta\", \"reforma edilicia\"];\n\nfunction normalizar(texto) {\n  return String(texto || \"\").toLowerCase().normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\");\n}\n\nlet items = $json.items_extraidos || [];\nif (typeof items === \"string\") {\n  try { items = JSON.parse(items); } catch { items = items.split(\",\"); }\n}\n\nif (!Array.isArray(items) || items.length === 0) {\n  return $json;\n}\n\nconst textoItems = normalizar(items.join(\" \"));\nconst coincidencias = keywords.filter((kw) => textoItems.includes(normalizar(kw)));\n\nif (coincidencias.length > 0) {\n  $json.keywords_encontradas = coincidencias;\n  return $json;\n}\n\nreturn null;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        16
+      ],
+      "id": "220dc780-9262-4777-b2d5-44aebd7e766a",
+      "name": "Filtro items keyword"
+    },
+    {
+      "parameters": {
+        "command": "sh /home/n8n/ARCE-LICITACIONES-IA/scripts/procesar_analisis_batch.sh"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -400
+      ],
+      "id": "b8cbfde4-e32c-428e-8f86-e57d6bdc5036",
+      "name": "Ejecutar análisis IA (Script Bash)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear la salida JSON del script bash\nconst stdout = $json.stdout || \"{}\";\n\ntry {\n  const resultado = JSON.parse(stdout);\n  return {\n    json: {\n      ...resultado,\n      stdout_raw: stdout.substring(0, 1000) // Guardar primeros 1000 chars por si hay debug\n    }\n  };\n} catch (e) {\n  return {\n    json: {\n      error: \"No se pudo parsear la salida del script\",\n      error_detalle: e.message,\n      stdout_raw: stdout.substring(0, 2000)\n    }\n  };\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -400
+      ],
+      "id": "52269da0-fd3c-435f-8c68-76a8eeacbf8d",
+      "name": "Parsear resultado del script"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Eliminar ya vencidos de la BD",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generar rango fechas URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar rango fechas URL": {
+      "main": [
+        [
+          {
+            "node": "RSS Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Request": {
+      "main": [
+        [
+          {
+            "node": "Convertir XML a JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir XML a JSON": {
+      "main": [
+        [
+          {
+            "node": "Formateo JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formateo JSON": {
+      "main": [
+        [
+          {
+            "node": "Filtro Candidatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Candidatos": {
+      "main": [
+        [
+          {
+            "node": "Arce Scraper",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Aclaraciones y Adjuntos + Llamados",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Limpiar respuesta scrapper": {
+      "main": [
+        [
+          {
+            "node": "Filtro items keyword",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arce Scraper": {
+      "main": [
+        [
+          {
+            "node": "Limpiar respuesta scrapper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Aclaraciones y Adjuntos + Llamados": {
+      "main": [
+        [
+          {
+            "node": "Insert rows to \"llamados\"",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Expandir Aclaraciones",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Expandir Adjuntos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Expandir items_llamado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Insert rows to \"archivos_adjuntos\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir Aclaraciones": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in \"aclaraciones\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows to \"items_llamados\"": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar análisis IA (Script Bash)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir items_llamado": {
+      "main": [
+        [
+          {
+            "node": "Insert rows to \"items_llamados\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro items keyword": {
+      "main": [
+        [
+          {
+            "node": "Merge Aclaraciones y Adjuntos + Llamados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar análisis IA (Script Bash)": {
+      "main": [
+        [
+          {
+            "node": "Parsear resultado del script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "edceaff5-3d48-4319-82cd-effaad9bb7a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7cf38276571105ba05ce1d549748b8b3799bda7b2c0d85b40eba91bffa3c46c4"
+  },
+  "id": "JIZhmBp1pxd0xPiL",
+  "tags": []
+}

@@ -1,160 +1,217 @@
-# 🏗️ ARCE Licitaciones - Monitor IA
+# ARCE Licitaciones IA
 
-> ⚠️ **Estado:** En desarrollo activo | ✅ Modelo IA funcional | 🚧 Integración n8n en progreso
+Sistema automatizado de monitoreo y análisis de licitaciones estatales uruguayas (ARCE) para el rubro aluminio, usando IA local con Ollama.
 
-Sistema automatizado de monitoreo de licitaciones estatales uruguayas (ARCE) para el rubro aluminio, usando IA local con Ollama.
+## Descripción
 
-## 🎯 ¿Qué hace?
+El sistema monitorea automáticamente el portal de Compras Estatales de Uruguay, descarga los pliegos de licitación, los analiza con IA para determinar relevancia para empresas de aluminio, y presenta los resultados en un dashboard interactivo.
 
-1. **Scraping automático** - n8n consulta ARCE cada 7 días
-2. **Deduplicación** - Detecta llamados ya procesados (PostgreSQL)
-3. **Descarga inteligente** - Extrae pliegos (PDF/ODT/DOC) a carpeta temporal
-4. **Análisis IA** - Modelo Llama 3.1 custom clasifica relevancia para aluminio
-5. **Notificación** - Alerta Telegram con datos clave y enlaces
+## Qué hace
 
-## ✨ Características
+1. **Scraping automático** - N8N consulta el RSS de ARCE periódicamente
+2. **Extracción de datos** - Scraper obtiene detalles, archivos y aclaraciones
+3. **Deduplicación** - Detecta llamados ya procesados en PostgreSQL
+4. **Análisis IA** - Modelo Llama 3.1 custom analiza relevancia para aluminio
+5. **Dashboard** - Visualización web con filtros, ordenamiento y feedback
 
-- ✅ **Extracción multi-formato:** PDF, ODT, DOC, DOCX (pdftotext, pandoc, tesseract OCR)
-- ✅ **Modelo IA custom:** Llama 3.1:8b fine-tuned para licitaciones de aluminio
-- ✅ **Tests automatizados:** Suite de validación con casos reales
-- 🚧 **Workflow n8n:** Orquestación completa (en desarrollo)
-- 🚧 **Notificaciones Telegram:** Bot con feedback interactivo (pendiente)
+## Arquitectura
 
-## 🧪 Estado Actual
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│   ARCE Web      │────▶│     N8N      │────▶│   PostgreSQL    │
+│ (RSS + Scraper) │     │ (workflow)   │     │   (datos)       │
+└─────────────────┘     └──────────────┘     └────────┬────────┘
+                                                      │
+                        ┌─────────────────────────────┼─────────────────────────────┐
+                        │                             │                             │
+                        ▼                             ▼                             ▼
+               ┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+               │ Análisis Batch  │          │    Dashboard    │          │   Ollama IA     │
+               │ (procesar_*.sh) │─────────▶│   (Express.js)  │◀─────────│ (Llama 3.1)     │
+               └─────────────────┘          └─────────────────┘          └─────────────────┘
+```
 
-| Componente | Estado | Notas |
-|------------|--------|-------|
-| Modelo IA Ollama | ✅ Funcional | Prompt optimizado, JSON puro |
-| Extracción texto | ✅ Funcional | Soporta PDF/ODT/DOC/imágenes OCR |
-| Tests automatizados | ✅ Funcional | 10 casos sintéticos + reales |
-| Workflow n8n | 🚧 En desarrollo | Scraping ARCE pendiente |
-| Bot Telegram | 🚧 Planeado | Notificaciones + feedback |
-| Deduplicación DB | 🚧 En desarrollo | Schema PostgreSQL definido |
+## Estado del Proyecto
 
-## 🚀 Quick Start (Modelo IA)
+| Componente | Estado | Descripción |
+|------------|--------|-------------|
+| Workflow N8N | Funcional | Scraping RSS, extracción, guardado en BD |
+| Modelo IA Ollama | Funcional | Prompt optimizado, respuesta JSON |
+| Script Análisis Batch | Funcional | Chunking para documentos grandes |
+| Dashboard Web | Funcional | Vista grilla/lista, filtros, feedback |
+| Base de Datos | Funcional | Vistas, triggers, prioridad automática |
+
+## Quick Start
 
 ### Prerrequisitos
-- Ollama instalado
-- Fedora/Ubuntu con `pdftotext`, `pandoc`, `tesseract`
 
-### 1. Clonar e instalar modelo
+- Docker y Docker Compose
+- Ollama con modelo `arce-licitaciones:latest`
+- Node.js 18+ (para dashboard)
+- PostgreSQL 16
+
+### 1. Configurar base de datos
+
 ```bash
-git clone https://github.com/tu-usuario/arce-licitaciones.git
-cd arce-licitaciones
+psql -h localhost -U n8n -d n8n -f schema.sql
+```
 
-# Crear modelo IA
+### 2. Crear modelo IA
+
+```bash
 ollama create arce-licitaciones -f models/modelfile-arce-v2
 ```
 
-### 2. Instalar dependencias
+### 3. Instalar dependencias del sistema
+
 ```bash
 # Fedora
-sudo dnf install -y poppler-utils pandoc tesseract tesseract-langpack-spa odt2txt antiword
+sudo dnf install -y poppler-utils pandoc tesseract tesseract-langpack-spa antiword jq
 
 # Ubuntu/Debian
-sudo apt install -y poppler-utils pandoc tesseract-ocr tesseract-ocr-spa odt2txt antiword
+sudo apt install -y poppler-utils pandoc tesseract-ocr tesseract-ocr-spa antiword jq
 ```
 
-### 3. Ejecutar tests
+### 4. Ejecutar dashboard
+
 ```bash
-cd tests/test-real-pdfs
-chmod +x *.sh extract-text.sh
-./test-real-pdfs.sh
-
-# Resultados en: ../../results/
+cd "Dashboard Licitaciones IA"
+cp .env.example .env
+# Editar .env con credenciales de PostgreSQL
+npm install
+node server.js
 ```
 
-## 📊 Ejemplos de Respuesta IA
+Dashboard disponible en `http://localhost:3000`
 
-**Caso positivo (relevante):**
+### 5. Ejecutar análisis batch
+
+```bash
+chmod +x procesar_analisis_batch.sh
+./procesar_analisis_batch.sh
+```
+
+## Estructura del Proyecto
+
+```
+N8N/
+├── Dashboard Licitaciones IA/    # Aplicación web
+│   ├── public/
+│   │   ├── index.html
+│   │   ├── app.js
+│   │   └── styles.css
+│   ├── server.js
+│   ├── package.json
+│   └── Dockerfile
+├── procesar_analisis_batch.sh    # Script de análisis IA
+├── schema.sql                    # Esquema de base de datos
+├── README.md                     # Este archivo
+├── README-DATABASE.md            # Documentación de BD
+└── README-WORKFLOW-BASH.md       # Documentación del script batch
+```
+
+## Características
+
+### Dashboard
+- Vista grilla y lista
+- Filtros por estado y relevancia
+- Ordenamiento múltiple (urgencia, confianza, fecha, título)
+- Búsqueda por texto
+- Modal de detalle con archivos y aclaraciones
+- Formulario de feedback humano
+
+### Análisis IA
+- Extracción multi-formato (PDF, DOC, DOCX, ODT, XLS, etc.)
+- Chunking automático para documentos grandes
+- Detección de materiales del rubro aluminio
+- Extracción de información de visita técnica
+- Identificación de formularios requeridos
+
+### Base de Datos
+- Búsqueda full-text en español
+- Cálculo automático de prioridad (urgencia + confianza + visita)
+- Triggers para mantener datos actualizados
+- Vista consolidada para el dashboard
+
+## Ejemplo de Respuesta IA
+
 ```json
 {
+  "descripcion_llamado": "Suministro e instalación de ventanas de aluminio con DVH",
   "es_relevante": true,
   "confianza": 95,
-  "razon": "Suministro de 45 ventanas de aluminio con DVH",
-  "materiales_detectados": ["aluminio", "DVH"],
-  "tipo_trabajo": "suministro e instalación",
-  "fecha_apertura": "15/11/2025",
-  "items_clave": ["45 ventanas", "DVH"]
+  "razon": "Proyecto de carpintería de aluminio con 45 ventanas y DVH",
+  "materiales_detectados": ["aluminio", "DVH", "vidrio"],
+  "resumen_trabajo": "Instalación de aberturas en edificio institucional",
+  "ubicacion_obra": "Montevideo, Ciudad Vieja",
+  "requiere_visita": true,
+  "ubicacion_visita": "Rincón 528",
+  "fecha_visita_especifica": "2025-11-25",
+  "contacto_visita_nombre": "Arq. García",
+  "contacto_visita_telefono": "2915 1234",
+  "formularios_requeridos": [
+    {"nombre": "Anexo I - Cotización", "obligatorio": true, "seccion": "Anexo I"},
+    {"nombre": "Declaración Jurada", "obligatorio": true, "seccion": "Anexo II"}
+  ]
 }
 ```
 
-**Caso negativo (no relevante):**
-```json
-{
-  "es_relevante": false,
-  "confianza": 90,
-  "razon": "Renovación de licencias de software, no relacionado con aluminio",
-  "materiales_detectados": []
-}
+## Configuración
+
+### Variables de entorno (Dashboard)
+
+```env
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=n8n
+PGUSER=n8n
+PGPASSWORD=tu_password
+PORT=3000
 ```
 
-## 🏗️ Arquitectura (Planeada)
-```
-┌─────────────┐
-│  ARCE Web   │ ← Scraping cada 7 días
-└──────┬──────┘
-       │
-   ┌───▼────┐
-   │  n8n   │ ← Orquestación
-   └───┬────┘
-       │
-   ┌───▼────────────────────┐
-   │ PostgreSQL (dedup)     │
-   └────────────────────────┘
-       │
-   ┌───▼──────────────────┐
-   │ Extracción texto     │ ← PDF/ODT/DOC → TXT
-   └───┬──────────────────┘
-       │
-   ┌───▼──────────────────┐
-   │ Ollama (Llama 3.1)   │ ← Clasificación IA
-   └───┬──────────────────┘
-       │
-   ┌───▼──────────────────┐
-   │ Telegram Bot         │ ← Notificación
-   └──────────────────────┘
+### Variables del script batch
+
+Editar al inicio de `procesar_analisis_batch.sh`:
+
+```bash
+TMP_DIR="/home/n8n/ARCE-LICITACIONES-IA/tmp"
+OLLAMA_URL="http://192.168.56.1:11434/api/generate"
+OLLAMA_MODEL="arce-licitaciones:latest"
+DB_HOST="postgres"
+DB_NAME="n8n"
 ```
 
-## 📖 Documentación
+## Deployment con Docker
 
-- [CLAUDE.md](CLAUDE.md) - Documentación técnica completa (AI-first approach)
-- `tests/README.txt` - Casos de prueba y resultados esperados
+```bash
+cd "Dashboard Licitaciones IA"
+docker build -t dashboard-licitaciones .
+docker run -d --name dashboard \
+  -p 3000:3000 \
+  --env-file .env \
+  dashboard-licitaciones
+```
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- **IA:** Ollama (Llama 3.1:8b custom)
-- **Orquestación:** n8n workflows
-- **Base de datos:** PostgreSQL
-- **Extracción texto:** pdftotext, pandoc, tesseract OCR
-- **Notificaciones:** Telegram Bot API
-- **Infraestructura:** Docker Compose
+- **IA**: Ollama (Llama 3.1:8b custom)
+- **Orquestación**: N8N workflows
+- **Base de datos**: PostgreSQL 16
+- **Backend**: Node.js + Express
+- **Frontend**: Vanilla JS + CSS
+- **Extracción texto**: pdftotext, pandoc, tesseract OCR
+- **Infraestructura**: Docker
 
-## 🗺️ Roadmap
+## Documentación
 
-- [x] Diseño de arquitectura
-- [x] Modelado IA (prompt engineering)
-- [x] Extracción multi-formato
-- [x] Suite de tests automatizados
-- [ ] Workflow n8n completo
-- [ ] Scraping ARCE + deduplicación
-- [ ] Bot Telegram con feedback
-- [ ] Deploy Docker production-ready
-- [ ] Documentación usuario final
+- [README-DATABASE.md](README-DATABASE.md) - Esquema completo de PostgreSQL
+- [README-WORKFLOW-BASH.md](README-WORKFLOW-BASH.md) - Script de análisis batch
 
-## 🤝 Contribuir
+## Licencia
 
-Este es un proyecto personal en desarrollo. Sugerencias y feedback bienvenidos vía Issues.
-
-## 📄 Licencia
-
-MIT License - Ver [LICENSE](LICENSE)
+MIT License
 
 ---
 
----
-👨‍💻 **Autor:** Sebastián Viglione  
-🔗 [LinkedIn](https://linkedin.com/in/sebaviglione) · [GitHub](https://github.com/sebaviglione)
-
-**Nota:** Este proyecto está en desarrollo activo. El modelo IA está funcional y testeado.
-
+**Autor:** Sebastián Viglione
+[LinkedIn](https://linkedin.com/in/sebaviglione) · [GitHub](https://github.com/sebaviglione)

@@ -37,7 +37,17 @@ const parseFechaHora = (raw = "") => {
     defaultViewport: { width: 1366, height: 900 },
   });
 
-  let resultado = { id, aclaraciones: [], archivos_adjuntos: [] };
+  let resultado = {
+    id,
+    departamento: null,
+    division: null,
+    servicio: null,
+    numero_llamado: null,
+    tipo_compra: null,
+    aclaraciones: [],
+    archivos_adjuntos: [],
+    items_extraidos: [],
+  };
 
   try {
     const page = await browser.newPage();
@@ -56,7 +66,50 @@ const parseFechaHora = (raw = "") => {
 
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
 
-    // Extraer aclaraciones
+    // === 0️⃣ Extraer metadata del llamado ===
+    const metadata = await page.evaluate(() => {
+      const getData = (labelText) => {
+        // Buscar en diferentes posibles estructuras del DOM
+        const allLabels = Array.from(document.querySelectorAll("label, .label, strong, .field-label, dt"));
+        for (const label of allLabels) {
+          const text = label.textContent.trim().toLowerCase();
+          if (text.includes(labelText.toLowerCase())) {
+            // Intentar obtener el valor desde el siguiente elemento
+            let valueElement = label.nextElementSibling;
+            if (!valueElement) {
+              // Si no hay siguiente elemento, buscar en el padre
+              valueElement = label.parentElement;
+            }
+            if (valueElement) {
+              let value = valueElement.textContent.trim();
+              // Remover el label del valor si está incluido
+              value = value.replace(label.textContent.trim(), "").trim();
+              // Limpiar caracteres especiales
+              value = value.replace(/^[:|\-–—]\s*/, "").trim();
+              if (value && value.length > 0 && value.length < 500) {
+                return value;
+              }
+            }
+          }
+        }
+
+        // Estrategia alternativa: buscar en párrafos o divs
+        const allText = document.body.innerText;
+        const regex = new RegExp(labelText + "\\s*[:|-]?\\s*([^\\n]{1,200})", "i");
+        const match = allText.match(regex);
+        return match ? match[1].trim() : null;
+      };
+
+      return {
+        departamento: getData("Departamento"),
+        division: getData("División") || getData("Division"),
+        servicio: getData("Servicio"),
+        numero_llamado: getData("Número de Compra") || getData("Numero de Compra") || getData("N° de Compra"),
+        tipo_compra: getData("Tipo de Compra") || getData("Modalidad"),
+      };
+    });
+
+    // === 1️⃣ Extraer aclaraciones ===
     const aclaracionesRaw = await page.$$eval(".aclaration-container tr", (rows) =>
       rows.map((tr) => {
         const td = tr.querySelector("td");
@@ -82,7 +135,7 @@ const parseFechaHora = (raw = "") => {
       })
       .filter((a) => a.fecha || a.texto || a.archivo_url);
 
-    // Extraer adjuntos
+    // === 2️⃣ Extraer adjuntos ===
     const adjuntosRaw = await page.$$eval("ul.buy-detail-list", (blocks) =>
       blocks.map((ul) => {
         const link = ul.querySelector("a[href]");
@@ -105,9 +158,46 @@ const parseFechaHora = (raw = "") => {
       })
       .filter((a) => a.archivo_url);
 
-    resultado = { id, aclaraciones, archivos_adjuntos };
+    // === 3️⃣ Extraer ítems del llamado ===
+    const itemsExtraidos = await page.$$eval(
+      ".row.item .desc-item h3",
+      (elements) =>
+        elements
+          .map((el) =>
+            el.textContent
+              .replace(/\s+/g, " ")
+              .replace(/Ítem\s*Nº\s*\d+/i, "")
+              .trim()
+          )
+          .filter((txt) => txt && txt.length > 0)
+    );
+
+    const itemsUnicos = [...new Set(itemsExtraidos)];
+
+    resultado = {
+      id,
+      departamento: metadata.departamento,
+      division: metadata.division,
+      servicio: metadata.servicio,
+      numero_llamado: metadata.numero_llamado,
+      tipo_compra: metadata.tipo_compra,
+      aclaraciones,
+      archivos_adjuntos,
+      items_extraidos: itemsUnicos,
+    };
   } catch (err) {
-    resultado = { id, error: err.message, aclaraciones: [], archivos_adjuntos: [] };
+    resultado = {
+      id,
+      departamento: null,
+      division: null,
+      servicio: null,
+      numero_llamado: null,
+      tipo_compra: null,
+      error: err.message,
+      aclaraciones: [],
+      archivos_adjuntos: [],
+      items_extraidos: [],
+    };
   } finally {
     await browser.close();
     process.stdout.write(JSON.stringify(resultado));

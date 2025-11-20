@@ -1,18 +1,18 @@
 {
-  "type": "module",
   "name": "arce-scraper",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
+  "description": "Scraper de licitaciones ARCE para el proyecto ARCE-LICITACIONES-IA.",
   "type": "module",
+  "main": "scrape_arce.js",
+  "scripts": {
+    "start": "node scrape_arce.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["scraper", "arce", "licitaciones", "puppeteer"],
+  "author": "Sebastián Viglione",
   "license": "ISC",
   "dependencies": {
-  "type": "module",
-    "puppeteer": "^24.28.0"
+    "puppeteer": "^24.8.0"
   }
 }
+

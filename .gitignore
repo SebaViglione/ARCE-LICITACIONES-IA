@@ -87,7 +87,7 @@ docker/cache/
 /reports/
 /.venv/
 /venv/
-/node_modules/
+**/node_modules/
 /__pycache__/
 
 # --- 🔧 Archivos temporales o de respaldo ---
