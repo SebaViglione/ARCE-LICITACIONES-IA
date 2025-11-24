@@ -119,17 +119,18 @@ extraer_texto() {
 
       unzip -q "$ARCHIVO" -d "$TMPDIR" 2>/dev/null || true
 
-      archivos_internos=$(find "$TMPDIR" -type f \( -iname '*.pdf' -o -iname '*.doc' -o -iname '*.docx' -o -iname '*.odt' -o -iname '*.txt' \) 2>/dev/null)
+      archivos_internos=$(find "$TMPDIR" -type f \( -iname '*.pdf' -o -iname '*.doc' -o -iname '*.docx' -o -iname '*.odt' -o -iname '*.txt' -o -iname '*.xls' -o -iname '*.xlsx' \) 2>/dev/null)
 
       if [ -n "$archivos_internos" ]; then
         (
           for archivo_interno in $archivos_internos; do
             ext_interno=$(printf '%s\n' "${archivo_interno##*.}" | tr '[:upper:]' '[:lower:]')
             case "$ext_interno" in
-              pdf)      pdftotext "$archivo_interno" - 2>/dev/null || true ;;
-              doc)      antiword "$archivo_interno" 2>/dev/null || true ;;
-              docx|odt) pandoc "$archivo_interno" -t plain 2>/dev/null || true ;;
-              txt)      cat "$archivo_interno" 2>/dev/null || true ;;
+              pdf)       pdftotext "$archivo_interno" - 2>/dev/null || true ;;
+              doc)       antiword "$archivo_interno" 2>/dev/null || true ;;
+              docx|odt)  pandoc "$archivo_interno" -t plain 2>/dev/null || true ;;
+              xls|xlsx)  pandoc "$archivo_interno" -t plain 2>/dev/null || true ;;
+              txt)       cat "$archivo_interno" 2>/dev/null || true ;;
             esac
             printf '\n--- Fin archivo: %s ---\n\n' "$(basename "$archivo_interno")"
           done

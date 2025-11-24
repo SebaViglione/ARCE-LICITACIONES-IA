@@ -10,6 +10,7 @@ set -eu
 # Configuración
 TMP_DIR="/home/n8n/ARCE-LICITACIONES-IA/tmp"
 EXTRACT_SCRIPT="/home/n8n/ARCE-LICITACIONES-IA/scripts/extract_text.sh"
+IM_EXTRACT_SCRIPT="/home/n8n/ARCE-LICITACIONES-IA/scripts/extract_im_html.sh"
 OLLAMA_URL="http://192.168.56.1:11434/api/generate"
 OLLAMA_MODEL="arce-licitaciones:latest"
 DB_HOST="postgres"
@@ -46,6 +47,57 @@ escape_json() {
 # Función para log
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
+}
+
+# ============================================
+# FUNCIÓN PARA OBTENER CONTEXTO DEL LLAMADO
+# ============================================
+
+# Obtener aclaraciones e items del llamado desde la BD
+obtener_contexto_llamado() {
+    local id_llamado="$1"
+
+    # Obtener aclaraciones
+    ACLARACIONES_QUERY="SELECT COALESCE(texto, '') FROM aclaraciones WHERE id_llamado = '$id_llamado' ORDER BY fecha DESC, hora DESC;"
+    ACLARACIONES_RAW=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -A -c "$ACLARACIONES_QUERY" 2>/dev/null || echo "")
+
+    # Obtener items del llamado
+    ITEMS_QUERY="SELECT COALESCE(texto, '') FROM items_llamado WHERE id_llamado = '$id_llamado';"
+    ITEMS_RAW=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -A -c "$ITEMS_QUERY" 2>/dev/null || echo "")
+
+    # Obtener descripción del llamado
+    DESC_QUERY="SELECT COALESCE(descripcion, '') FROM llamados WHERE id = '$id_llamado';"
+    DESC_RAW=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t -A -c "$DESC_QUERY" 2>/dev/null || echo "")
+
+    # Formatear aclaraciones
+    CONTEXTO_ACLARACIONES=""
+    if [ -n "$ACLARACIONES_RAW" ]; then
+        CONTEXTO_ACLARACIONES="
+
+=== ACLARACIONES DEL LLAMADO ===
+$ACLARACIONES_RAW"
+    fi
+
+    # Formatear items
+    CONTEXTO_ITEMS=""
+    if [ -n "$ITEMS_RAW" ]; then
+        CONTEXTO_ITEMS="
+
+=== ITEMS/PRODUCTOS SOLICITADOS ===
+$ITEMS_RAW"
+    fi
+
+    # Formatear descripción
+    CONTEXTO_DESC=""
+    if [ -n "$DESC_RAW" ]; then
+        CONTEXTO_DESC="
+
+=== DESCRIPCIÓN DEL LLAMADO ===
+$DESC_RAW"
+    fi
+
+    # Retornar contexto combinado
+    echo "${CONTEXTO_DESC}${CONTEXTO_ITEMS}${CONTEXTO_ACLARACIONES}"
 }
 
 # ============================================
@@ -136,36 +188,77 @@ Tienes los siguientes fragmentos analizados del pliego \"${titulo_llamado}\".
 Fragmentos:
 ${chunks_json}
 
-COMBINA toda la información en el esquema JSON COMPLETO:
+COMBINA toda la información en el esquema JSON COMPLETO.
 
+CRITERIOS DE RELEVANCIA Y CONFIANZA para empresa de aluminio:
+
+RELEVANTE (es_relevante=true):
+- Aluminio, aberturas, ventanas, puertas de aluminio, fachadas, barandas, cerramientos, DVH → confianza 80-95%
+- Mamparas con estructura metálica, vidrios para cerramientos → confianza 70-85%
+
+PARCIALMENTE RELEVANTE (es_relevante=true, pero menor confianza):
+- Mamparas divisorias, vidrios templados sin aluminio, estructuras metálicas → confianza 50-70%
+
+NO RELEVANTE (es_relevante=false):
+- Solo vidrio sin estructura de aluminio (ej: limpieza de vidrios) → confianza 20-40%
+- Mantenimiento sin provisión de materiales → confianza 15-35%
+- Pintura, electricidad, plomería, limpieza, alimentos, sin relación con aluminio → confianza 0-20%
+
+REGLA CLAVE: Si el llamado NO requiere provisión o instalación de aluminio/aberturas, es_relevante DEBE ser false.
+
+DETECCIÓN DE VISITA OBLIGATORIA:
+Busca estos patrones en CUALQUIER fragmento:
+- \"visita obligatoria\"
+- \"visita previa obligatoria\"
+- \"visita técnica obligatoria\"
+- \"se requiere visita\"
+- \"deberá realizar visita\"
+Si encuentras alguno, requiere_visita DEBE ser true.
+
+DETECCIÓN DE VISITA A COORDINAR:
+Si el pliego indica que la visita debe coordinarse por teléfono, correo o contactando previamente (sin fecha fija), entonces:
+- requiere_visita: true
+- coordina_visita: true
+- fecha_visita_especifica: null
+
+REGLAS DE FORMATO:
+1. descripcion_llamado: Resumen ESPECÍFICO y DESCRIPTIVO del llamado en ≤150 caracteres. DEBE incluir: tipo de trabajo + material principal + ubicación si la hay. Ejemplo: \"Provisión e instalación de ventanas de aluminio DVH para liceo en Salto\". NUNCA uses frases genéricas. NUNCA vacío.
+2. resumen_trabajo: Describe DETALLADAMENTE qué trabajo hay que realizar: cantidades, especificaciones técnicas (vidrios, medidas, colores), plazos, lugar de instalación, requisitos especiales. Mínimo 2-3 oraciones. NUNCA vacío.
+3. es_relevante: true o false (NUNCA null)
+4. confianza: número entre 0 y 100 (NUNCA null)
+5. requiere_visita: true o false (NUNCA null)
+6. coordina_visita: true si debe coordinarse por teléfono/correo sin fecha fija, false si hay fecha o no requiere visita (NUNCA null)
+7. fecha_visita_especifica: formato 2025-11-25 o null si debe coordinarse
+8. razon: Explicación clara y específica de por qué es o no relevante, mencionando materiales encontrados. NUNCA vacío.
+9. contacto_visita_correo: SOLO el email, sin URLs ni texto adicional.
+10. materiales_detectados: SOLO los materiales que REALMENTE aparecen, no agregues genéricos.
+
+ESQUEMA JSON (usa valores REALES del llamado, NUNCA copies estos ejemplos):
 {
-  \"descripcion_llamado\": \"Resumen en ≤150 caracteres\",
-  \"es_relevante\": true|false,
-  \"confianza\": 0-100,
-  \"razon\": \"Explicación de por qué es/no es relevante\",
-  \"materiales_detectados\": [\"lista única sin duplicados\"],
-  \"resumen_trabajo\": \"Descripción del trabajo requerido\",
-  \"ubicacion_obra\": \"Ubicación consolidada\",
-  \"requiere_visita\": true|false,
-  \"ubicacion_visita\": \"Dirección de visita si aplica\",
-  \"fecha_visita_especifica\": \"YYYY-MM-DD o null\",
-  \"coordina_visita\": true|false,
-  \"contacto_visita_nombre\": \"string o null\",
-  \"contacto_visita_telefono\": \"string o null\",
-  \"contacto_visita_correo\": \"string o null\",
+  \"descripcion_llamado\": \"[resumen ESPECÍFICO en ≤150 chars]\",
+  \"es_relevante\": true,
+  \"confianza\": 85,
+  \"razon\": \"[explicación clara y específica]\",
+  \"materiales_detectados\": [\"[solo materiales que aparecen]\"],
+  \"resumen_trabajo\": \"[descripción DETALLADA del trabajo]\",
+  \"ubicacion_obra\": \"[dirección del pliego o null]\",
+  \"requiere_visita\": true,
+  \"ubicacion_visita\": \"[dirección de visita del pliego o null]\",
+  \"fecha_visita_especifica\": \"2025-11-25 o null\",
+  \"coordina_visita\": true,
+  \"contacto_visita_nombre\": \"[nombre del contacto o null]\",
+  \"contacto_visita_telefono\": \"[teléfono del contacto o null]\",
+  \"contacto_visita_correo\": \"[email del contacto o null]\",
   \"formularios_requeridos\": [
-    {\"nombre\": \"...\", \"obligatorio\": true, \"seccion\": \"...\"}
+    {\"nombre\": \"[nombre del formulario]\", \"obligatorio\": true, \"seccion\": \"[ubicación en pliego]\"}
   ]
 }
 
-REGLAS:
+CRITERIOS ADICIONALES:
 - Unifica materiales (elimina duplicados)
 - Si varios fragmentos mencionan ubicación, consolida en una sola
 - Lista TODOS los formularios encontrados SIN DUPLICAR
-- NORMALIZA formularios: convierte a Title Case (ej: \"Anexo I\", no \"ANEXO I\" ni \"anexo i\")
-- Si encuentras el mismo formulario con diferente capitalización, mantenlo solo una vez
-- confianza NUNCA puede ser null (pon número entre 0-100)
-- razon NUNCA puede estar vacío"
+- NORMALIZA formularios: convierte a Title Case (ej: \"Anexo I\")"
 
     OLLAMA_BODY=$(jq -n \
         --arg model "$OLLAMA_MODEL" \
@@ -272,71 +365,205 @@ while IFS='|' read -r llamado_id archivo_analizado tipo archivo_url titulo fecha
         # ========================================
         # 2.2) EXTRAER TEXTO
         # ========================================
-        log "  → Extrayendo texto..."
 
-        if EXTRACT_OUTPUT=$(sh "$EXTRACT_SCRIPT" "$archivo_analizado" "$llamado_id" 2>&1); then
-            log "  ✓ Texto extraído"
+        # Verificar si es un archivo HTML de Intendencia de Montevideo
+        if echo "$archivo_analizado" | grep -qi '\.html$'; then
+            log "  → Procesando HTML de Intendencia de Montevideo..."
 
-            # Limpiar caracteres de control antes de parsear con jq
-            EXTRACT_CLEAN=$(echo "$EXTRACT_OUTPUT" | tr -d '\000-\037' | tr -d '\177')
+            if EXTRACT_OUTPUT=$(sh "$IM_EXTRACT_SCRIPT" "$TMP_DIR/$archivo_analizado" "$llamado_id" 2>&1); then
+                log "  ✓ HTML de IM procesado"
 
-            # Parsear salida JSON del script
-            TEXTO_EXTRAIDO=$(echo "$EXTRACT_CLEAN" | jq -r '.texto_extraido // empty')
+                # Limpiar caracteres de control
+                EXTRACT_CLEAN=$(echo "$EXTRACT_OUTPUT" | tr -d '\000-\037' | tr -d '\177')
 
-            if [ -z "$TEXTO_EXTRAIDO" ]; then
-                ERROR_MSG="extract_text.sh no retornó texto"
-                log "  ✗ $ERROR_MSG"
+                # Parsear salida JSON
+                TEXTO_EXTRAIDO=$(echo "$EXTRACT_CLEAN" | jq -r '.texto_extraido // empty')
+
+                # Insertar items en items_llamado
+                ITEMS_COUNT=$(echo "$EXTRACT_CLEAN" | jq -r '.items | length')
+                if [ "$ITEMS_COUNT" -gt 0 ]; then
+                    log "  → Insertando $ITEMS_COUNT items..."
+
+                    # Guardar items en archivo temporal para evitar subshell con pipe
+                    TMP_ITEMS_FILE="/tmp/items_insert_$$"
+                    echo "$EXTRACT_CLEAN" | jq -r '.items[].texto' > "$TMP_ITEMS_FILE"
+
+                    ITEMS_INSERTED=0
+                    while IFS= read -r item_texto; do
+                        if [ -n "$item_texto" ]; then
+                            item_escaped=$(escape_sql "$item_texto")
+                            INSERT_ERROR=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c \
+                                "INSERT INTO items_llamado (id_llamado, texto) VALUES ('$llamado_id', '$item_escaped');" 2>&1)
+                            if [ $? -eq 0 ]; then
+                                ITEMS_INSERTED=$((ITEMS_INSERTED + 1))
+                            else
+                                log "    ⚠ Error insertando item: $item_texto"
+                                log "    ⚠ SQL: $INSERT_ERROR"
+                            fi
+                        fi
+                    done < "$TMP_ITEMS_FILE"
+
+                    rm -f "$TMP_ITEMS_FILE"
+                    log "  ✓ Items insertados ($ITEMS_INSERTED de $ITEMS_COUNT)"
+                fi
+
+                # Insertar adjuntos en archivos_adjuntos
+                ADJUNTOS_COUNT=$(echo "$EXTRACT_CLEAN" | jq -r '.adjuntos | length')
+                if [ "$ADJUNTOS_COUNT" -gt 0 ]; then
+                    log "  → Insertando $ADJUNTOS_COUNT adjuntos..."
+                    echo "$EXTRACT_CLEAN" | jq -c '.adjuntos[]' | while IFS= read -r adjunto; do
+                        adj_nombre=$(echo "$adjunto" | jq -r '.nombre')
+                        adj_tipo=$(echo "$adjunto" | jq -r '.tipo')
+                        adj_url=$(echo "$adjunto" | jq -r '.archivo_url')
+                        adj_label=$(echo "$adjunto" | jq -r '.label')
+
+                        adj_nombre_esc=$(escape_sql "$adj_nombre")
+                        adj_label_esc=$(escape_sql "$adj_label")
+
+                        PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c \
+                            "INSERT INTO archivos_adjuntos (llamado_id, nombre, tipo, archivo_url, label)
+                             VALUES ('$llamado_id', '$adj_nombre_esc', '$adj_tipo', '$adj_url', '$adj_label_esc')
+                             ON CONFLICT (llamado_id, archivo_url) DO NOTHING;" \
+                            > /dev/null 2>&1 || true
+                    done
+                    log "  ✓ Adjuntos insertados"
+                fi
+
+                if [ -z "$TEXTO_EXTRAIDO" ]; then
+                    ERROR_MSG="extract_im_html.sh no retornó texto"
+                    log "  ✗ $ERROR_MSG"
+                fi
             else
+                ERROR_MSG="Error procesando HTML de IM"
+                log "  ✗ $ERROR_MSG"
+            fi
+        else
+            # Archivo normal (PDF, etc.)
+            log "  → Extrayendo texto..."
+
+            # Capturar solo stdout (JSON), stderr va a /dev/null para evitar warnings de herramientas faltantes
+            if EXTRACT_OUTPUT=$(sh "$EXTRACT_SCRIPT" "$archivo_analizado" "$llamado_id" 2>/dev/null); then
+                log "  ✓ Texto extraído"
+
+                # Limpiar caracteres de control antes de parsear con jq
+                EXTRACT_CLEAN=$(echo "$EXTRACT_OUTPUT" | tr -d '\000-\037' | tr -d '\177')
+
+                # Parsear salida JSON del script
+                TEXTO_EXTRAIDO=$(echo "$EXTRACT_CLEAN" | jq -r '.texto_extraido // empty')
+
+                if [ -z "$TEXTO_EXTRAIDO" ]; then
+                    ERROR_MSG="extract_text.sh no retornó texto"
+                    log "  ✗ $ERROR_MSG"
+                fi
+            else
+                ERROR_MSG="Error extrayendo texto"
+                log "  ✗ $ERROR_MSG"
+            fi
+        fi
+
+        # Continuar con análisis IA si hay texto
+        if [ -n "$TEXTO_EXTRAIDO" ]; then
                 # ========================================
-                # 2.3) LLAMAR A OLLAMA (con chunking si es necesario)
+                # 2.3) OBTENER CONTEXTO COMPLETO DEL LLAMADO
                 # ========================================
-                TEXTO_LENGTH=$(echo "$TEXTO_EXTRAIDO" | wc -c)
+                log "  → Obteniendo contexto del llamado (aclaraciones, items)..."
+                CONTEXTO_LLAMADO=$(obtener_contexto_llamado "$llamado_id")
+
+                # Combinar texto extraído con contexto
+                TEXTO_COMPLETO="=== TÍTULO DEL LLAMADO ===
+$titulo
+
+=== CONTENIDO DEL ARCHIVO: $archivo_analizado ===
+$TEXTO_EXTRAIDO
+$CONTEXTO_LLAMADO"
+
+                # ========================================
+                # 2.4) LLAMAR A OLLAMA (con chunking si es necesario)
+                # ========================================
+                TEXTO_LENGTH=$(echo "$TEXTO_COMPLETO" | wc -c)
 
                 if [ "$TEXTO_LENGTH" -le "$MAX_CHARS" ]; then
                     # CASO 1: Documento pequeño - análisis directo
-                    log "  → Analizando con IA (documento pequeño: $TEXTO_LENGTH chars)..."
+                    log "  → Analizando con IA (documento completo: $TEXTO_LENGTH chars)..."
 
-                    PROMPT="Analiza este pliego de licitación completo y extrae información según el esquema JSON.
+                    PROMPT="Analiza este llamado de licitación y extrae información estructurada.
 
-Criterios de relevancia: aluminio, aberturas, ventanas, fachadas, barandas, cerramientos, DVH, estructuras metálicas, mamparas, vidrios.
+IMPORTANTE - ANALIZA TODAS LAS FUENTES POR IGUAL:
+Debes analizar con la MISMA importancia:
+1. El TÍTULO del llamado (contiene info clave como \"visita obligatoria\", tipo de obra, etc.)
+2. La DESCRIPCIÓN del llamado
+3. El contenido del ARCHIVO ADJUNTO (pliego/PDF)
+4. Los ITEMS/PRODUCTOS solicitados
+5. Las ACLARACIONES oficiales
 
-EXTRAE:
-1) Descripción resumida (≤150 caracteres)
-2) ¿Es relevante para empresa de aluminio? (true/false)
-3) Nivel de confianza 0-100
-4) Razón de la relevancia/irrelevancia
-5) Materiales detectados
-6) Resumen del trabajo requerido
-7) Ubicación de la obra
-8) Información de visita técnica (si aplica)
-9) Contactos
-10) FORMULARIOS REQUERIDOS para presentación del presupuesto:
-    - Busca: \"deberá presentar\", \"formulario\", \"anexo\", \"declaración jurada\", \"planilla\"
-    - Nombre exacto, si es obligatorio, ubicación en pliego
+NO bases tu análisis solo en el PDF. El título y descripción pueden tener información crítica.
 
-Esquema JSON EXACTO:
+CRITERIOS DE RELEVANCIA Y CONFIANZA para empresa de aluminio:
+
+RELEVANTE (es_relevante=true):
+- Aluminio, aberturas, ventanas, puertas de aluminio, fachadas, barandas, cerramientos, DVH → confianza 80-95%
+- Mamparas con estructura metálica, vidrios para cerramientos → confianza 70-85%
+
+PARCIALMENTE RELEVANTE (es_relevante=true, pero menor confianza):
+- Mamparas divisorias, vidrios templados sin aluminio, estructuras metálicas → confianza 50-70%
+
+NO RELEVANTE (es_relevante=false):
+- Solo vidrio sin estructura de aluminio (ej: limpieza de vidrios) → confianza 20-40%
+- Mantenimiento sin provisión de materiales → confianza 15-35%
+- Pintura, electricidad, plomería, limpieza, alimentos, sin relación con aluminio → confianza 0-20%
+
+REGLA CLAVE: Si el llamado NO requiere provisión o instalación de aluminio/aberturas, es_relevante DEBE ser false.
+
+DETECCIÓN DE VISITA OBLIGATORIA:
+Busca estos patrones en CUALQUIER parte del contenido (título, descripción, pliego):
+- \"visita obligatoria\"
+- \"visita previa obligatoria\"
+- \"visita técnica obligatoria\"
+- \"se requiere visita\"
+- \"deberá realizar visita\"
+Si encuentras alguno, requiere_visita DEBE ser true.
+
+DETECCIÓN DE VISITA A COORDINAR:
+Si el pliego indica que la visita debe coordinarse por teléfono, correo o contactando previamente (sin fecha fija), entonces:
+- requiere_visita: true
+- coordina_visita: true
+- fecha_visita_especifica: null
+
+REGLAS DE FORMATO:
+1. descripcion_llamado: Resumen ESPECÍFICO y DESCRIPTIVO del llamado en ≤150 caracteres. DEBE incluir: tipo de trabajo + material principal + ubicación si la hay. Ejemplo: \"Provisión e instalación de ventanas de aluminio DVH para liceo en Salto\". NUNCA uses frases genéricas como \"Licitación para...\" o \"Adquisición de materiales\". NUNCA vacío.
+2. resumen_trabajo: Describe DETALLADAMENTE qué trabajo hay que realizar, incluyendo: cantidades aproximadas si se mencionan, especificaciones técnicas (tipos de vidrio, medidas, colores), plazos de entrega, lugar de instalación, y cualquier requisito especial. Mínimo 2-3 oraciones completas. NUNCA vacío.
+3. es_relevante: true o false (NUNCA null)
+4. confianza: número entre 0 y 100 (NUNCA null)
+5. requiere_visita: true o false (NUNCA null)
+6. coordina_visita: true si la visita debe coordinarse por teléfono/correo sin fecha fija, false si hay fecha específica o no requiere visita (NUNCA null)
+7. fecha_visita_especifica: formato 2025-11-25 o null si debe coordinarse
+8. razon: Explicación clara y específica de por qué es o no relevante, mencionando los materiales encontrados o la ausencia de ellos. NUNCA vacío.
+9. contacto_visita_correo: SOLO el email (ej: \"contacto@ejemplo.gub.uy\"), sin URLs ni texto adicional.
+10. materiales_detectados: SOLO los materiales que REALMENTE aparecen en el llamado, no agregues materiales genéricos.
+
+ESQUEMA JSON (usa valores REALES del llamado, NUNCA copies estos ejemplos):
 {
-  \"descripcion_llamado\": \"string(≤150)\",
-  \"es_relevante\": true|false,
-  \"confianza\": 0-100,
-  \"razon\": \"string\",
-  \"materiales_detectados\": [\"aluminio\"],
-  \"resumen_trabajo\": \"string|null\",
-  \"ubicacion_obra\": \"string|null\",
-  \"requiere_visita\": true|false,
-  \"ubicacion_visita\": \"string|null\",
-  \"fecha_visita_especifica\": \"YYYY-MM-DD|null\",
-  \"coordina_visita\": true|false,
-  \"contacto_visita_nombre\": \"string|null\",
-  \"contacto_visita_telefono\": \"string|null\",
-  \"contacto_visita_correo\": \"string|null\",
+  \"descripcion_llamado\": \"[resumen del llamado en ≤150 chars]\",
+  \"es_relevante\": true,
+  \"confianza\": 85,
+  \"razon\": \"[explicación clara de por qué es o no relevante]\",
+  \"materiales_detectados\": [\"[solo materiales que aparecen en el llamado]\"],
+  \"resumen_trabajo\": \"[descripción del trabajo a realizar]\",
+  \"ubicacion_obra\": \"[dirección del pliego o null]\",
+  \"requiere_visita\": true,
+  \"ubicacion_visita\": \"[dirección de visita del pliego o null]\",
+  \"fecha_visita_especifica\": \"2025-11-25 o null\",
+  \"coordina_visita\": true,
+  \"contacto_visita_nombre\": \"[nombre del contacto o null]\",
+  \"contacto_visita_telefono\": \"[teléfono del contacto o null]\",
+  \"contacto_visita_correo\": \"[email del contacto o null]\",
   \"formularios_requeridos\": [
-    {\"nombre\": \"string\", \"obligatorio\": true|false, \"seccion\": \"string\"}
+    {\"nombre\": \"[nombre del formulario]\", \"obligatorio\": true, \"seccion\": \"[ubicación en pliego]\"}
   ]
 }
 
-Texto del pliego:
-$TEXTO_EXTRAIDO"
+Contenido completo del llamado:
+$TEXTO_COMPLETO"
 
                     OLLAMA_BODY=$(jq -n \
                         --arg model "$OLLAMA_MODEL" \
@@ -369,7 +596,7 @@ $TEXTO_EXTRAIDO"
 
                     while [ "$OFFSET" -lt "$TEXTO_LENGTH" ]; do
                         CHUNK_INDEX=$((CHUNK_INDEX + 1))
-                        CHUNK_TEXTO=$(echo "$TEXTO_EXTRAIDO" | tail -c +$((OFFSET + 1)) | head -c "$CHUNK_SIZE")
+                        CHUNK_TEXTO=$(echo "$TEXTO_COMPLETO" | tail -c +$((OFFSET + 1)) | head -c "$CHUNK_SIZE")
 
                         log "  → Analizando chunk $CHUNK_INDEX/$NUM_CHUNKS..."
 
@@ -419,6 +646,44 @@ $CHUNK_JSON"
                     contacto_tel=$(echo "$OLLAMA_JSON" | jq -r '.contacto_visita_telefono // null')
                     contacto_mail=$(echo "$OLLAMA_JSON" | jq -r '.contacto_visita_correo // null')
                     formularios_json=$(echo "$OLLAMA_JSON" | jq -c '.formularios_requeridos // []')
+
+                    # ========================================
+                    # POST-PROCESAMIENTO: Normalizar valores
+                    # ========================================
+
+                    # Fix 1: Inferir es_relevante de confianza si es null
+                    if [ "$es_relevante" = "null" ] || [ -z "$es_relevante" ]; then
+                        # Asegurar que confianza sea un número
+                        if [ "$confianza" = "null" ] || [ -z "$confianza" ]; then
+                            confianza=0
+                        fi
+                        # Inferir: >= 50 es relevante, < 50 no es relevante
+                        if [ "$confianza" -ge 50 ] 2>/dev/null; then
+                            es_relevante="true"
+                        else
+                            es_relevante="false"
+                        fi
+                    fi
+
+                    # Fix 2: Normalizar requiere_visita si es null
+                    if [ "$requiere_visita" = "null" ] || [ -z "$requiere_visita" ]; then
+                        requiere_visita="false"
+                    fi
+
+                    # Fix 3: Normalizar coordina_visita si es null
+                    if [ "$coordina_visita" = "null" ] || [ -z "$coordina_visita" ]; then
+                        coordina_visita="false"
+                    fi
+
+                    # Fix 4: Limpiar fecha_visita de comillas extras y normalizar
+                    # Quitar comillas simples extras: '2025-11-25' -> 2025-11-25
+                    fecha_visita=$(echo "$fecha_visita" | sed "s/^'//; s/'$//")
+                    # Normalizar variantes de null
+                    if [ "$fecha_visita" = "null" ] || [ "$fecha_visita" = "NULL" ] || [ -z "$fecha_visita" ]; then
+                        fecha_visita="null"
+                    fi
+                    # Guardar valor limpio para JSON (antes de agregar comillas SQL)
+                    fecha_visita_json="$fecha_visita"
 
                     # ========================================
                     # 2.4) INSERTAR EN BD
@@ -520,7 +785,7 @@ DO UPDATE SET
                             --arg ubicacion_obra "$ubicacion_obra" \
                             --argjson requiere_visita "$requiere_visita" \
                             --arg ubicacion_visita "$ubicacion_visita" \
-                            --arg fecha_visita "$fecha_visita" \
+                            --arg fecha_visita "$fecha_visita_json" \
                             --argjson coordina_visita "$coordina_visita" \
                             --arg contacto_nombre "$contacto_nombre" \
                             --arg contacto_tel "$contacto_tel" \
@@ -556,10 +821,6 @@ DO UPDATE SET
                     fi
                 fi
             fi
-        else
-            ERROR_MSG="Error al extraer texto: $EXTRACT_OUTPUT"
-            log "  ✗ $ERROR_MSG"
-        fi
 
         # ========================================
         # 2.5) ELIMINAR ARCHIVO TEMPORAL
@@ -622,4 +883,3 @@ cat <<EOF
   "fecha_proceso": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
-

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Dashboard de Licitaciones</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <h1>Licitaciones</h1>
+        <span class="top-bar-subtitle">Panel de seguimiento</span>
+      </div>
+      <div class="top-bar-right">
+        <div class="filter-group">
+          <label>Estado</label>
+          <select id="filterEstado">
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="en_progreso">En progreso</option>
+            <option value="ganado">Ganado</option>
+            <option value="descartado">Descartado</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Relevancia</label>
+          <select id="filterRelevancia">
+            <option value="">Todas</option>
+            <option value="solo_ia_relevante">IA relevantes</option>
+            <option value="solo_humano_relevante">Humano relevantes</option>
+            <option value="proximos_7_dias">Próximos 7 días</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Ordenar</label>
+          <select id="sortBy">
+            <option value="dias_asc">Más urgentes</option>
+            <option value="dias_desc">Menos urgentes</option>
+            <option value="confianza_desc">Mayor confianza</option>
+            <option value="confianza_asc">Menor confianza</option>
+            <option value="fecha_pub_desc">Más recientes</option>
+            <option value="fecha_pub_asc">Más antiguos</option>
+            <option value="titulo_asc">Título A-Z</option>
+          </select>
+        </div>
+
+        <div class="search-wrapper">
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Buscar licitaciones..."
+          />
+        </div>
+
+        <div class="view-toggle">
+          <button id="viewGrid" class="view-btn active" title="Vista grilla">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="1" y="1" width="6" height="6" rx="1"/>
+              <rect x="9" y="1" width="6" height="6" rx="1"/>
+              <rect x="1" y="9" width="6" height="6" rx="1"/>
+              <rect x="9" y="9" width="6" height="6" rx="1"/>
+            </svg>
+          </button>
+          <button id="viewList" class="view-btn" title="Vista lista">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="1" y="2" width="14" height="2" rx="1"/>
+              <rect x="1" y="7" width="14" height="2" rx="1"/>
+              <rect x="1" y="12" width="14" height="2" rx="1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="summary-panel">
+        <h2>Resumen</h2>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Activos</div>
+            <div class="summary-value" id="sumActivos">0</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Próximos 5 días</div>
+            <div class="summary-value" id="sumProximos">0</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">IA dice relevantes</div>
+            <div class="summary-value" id="sumIARelevantes">0</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Revisadas por humano</div>
+            <div class="summary-value" id="sumHumanas">0</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cards-panel">
+        <div id="cardsContainer" class="cards-grid"></div>
+      </section>
+    </main>
+
+    <!-- Modal detalle -->
+    <div id="modalOverlay" class="modal-overlay hidden">
+      <div class="modal">
+        <button class="modal-close" id="modalClose">&times;</button>
+        <div class="modal-content">
+          <div class="modal-main">
+            <h2 id="modalTitulo"></h2>
+            <p class="modal-descripcion" id="modalDescripcion"></p>
+
+            <div class="modal-meta">
+              <div><strong>Publicación:</strong> <span id="modalFechaPub"></span></div>
+              <div><strong>Apertura:</strong> <span id="modalFechaApertura"></span></div>
+              <div><strong>Días restantes:</strong> <span id="modalDiasRestantes"></span></div>
+              <div><strong>Urgencia:</strong> <span id="modalUrgencia"></span></div>
+              <div><strong>Estado:</strong> <span id="modalEstado"></span></div>
+            </div>
+
+            <div class="modal-links">
+              <a href="#" id="modalUrlDetalle" target="_blank">Ver llamado en Compras Estatales</a>
+            </div>
+
+            <div class="modal-section">
+              <h3>Archivos adjuntos</h3>
+              <ul id="modalAdjuntosList" class="simple-list"></ul>
+            </div>
+
+            <div class="modal-section">
+              <h3>Aclaraciones</h3>
+              <ul id="modalAclaracionesList" class="simple-list"></ul>
+            </div>
+
+            <div class="modal-section">
+              <h3>Análisis IA</h3>
+              <p><strong>Relevante (IA):</strong> <span id="modalIARelevante"></span></p>
+              <p><strong>Confianza:</strong> <span id="modalIAConfianza"></span></p>
+              <p><strong>Razón:</strong></p>
+              <p id="modalIARazon" class="text-muted"></p>
+              <p><strong>Resumen de trabajo:</strong></p>
+              <p id="modalIAResumen" class="text-muted"></p>
+              <p><strong>Materiales detectados:</strong></p>
+              <p id="modalIAMateriales" class="text-muted"></p>
+            </div>
+
+            <div class="modal-section">
+              <h3>Ubicación y visita técnica</h3>
+              <p><strong>Ubicación de obra:</strong> <span id="modalUbicacionObra"></span></p>
+              <p><strong>Requiere visita:</strong> <span id="modalRequiereVisita"></span></p>
+              <div id="modalVisitaDetalles" style="display:none;">
+                <p><strong>Ubicación visita:</strong> <span id="modalUbicacionVisita"></span></p>
+                <p><strong>Fecha visita:</strong> <span id="modalFechaVisita"></span></p>
+              </div>
+            </div>
+
+            <div class="modal-section" id="modalContactoSection" style="display:none;">
+              <h3>Contacto para visita</h3>
+              <p><strong>Nombre:</strong> <span id="modalContactoNombre"></span></p>
+              <p><strong>Teléfono:</strong> <span id="modalContactoTelefono"></span></p>
+              <p><strong>Correo:</strong> <span id="modalContactoCorreo"></span></p>
+            </div>
+
+            <div class="modal-section" id="modalFormulariosSection" style="display:none;">
+              <h3>Formularios requeridos</h3>
+              <ul id="modalFormulariosList" class="simple-list"></ul>
+            </div>
+          </div>
+
+          <aside class="modal-sidebar">
+            <h3>Feedback humano</h3>
+            <form id="feedbackForm">
+              <input type="hidden" id="fbLlamadoId" />
+
+              <label class="checkbox">
+                <input type="checkbox" id="fbEsRelevante" />
+                <span>Es relevante para nosotros</span>
+              </label>
+
+              <label>
+                Estado de seguimiento
+                <select id="fbEstadoSeguimiento">
+                  <option value="pendiente">Pendiente</option>
+                  <option value="en_progreso">En progreso</option>
+                  <option value="ganado">Ganado</option>
+                  <option value="descartado">Descartado</option>
+                </select>
+              </label>
+
+              <label>
+                Comentario
+                <textarea
+                  id="fbComentario"
+                  rows="6"
+                  placeholder="Notas, decisiones, próximos pasos..."
+                ></textarea>
+              </label>
+
+              <button type="submit" class="btn-primary">Guardar feedback</button>
+              <div id="fbStatus" class="fb-status"></div>
+            </form>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
