@@ -456,6 +456,70 @@ CREATE INDEX idx_materiales_gin ON public.analisis_ia USING gin (materiales_dete
 
 
 --
+-- Name: calcular_prioridad(integer, numeric, boolean); Type: FUNCTION; Schema: public; Owner: n8n
+--
+
+CREATE FUNCTION public.calcular_prioridad(p_dias_restantes integer, p_confianza numeric, p_requiere_visita boolean) RETURNS integer
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+BEGIN
+  RETURN (
+    CASE
+      WHEN p_dias_restantes IS NULL THEN 0
+      WHEN p_dias_restantes <= 0 THEN 50
+      WHEN p_dias_restantes <= 2 THEN 40
+      WHEN p_dias_restantes <= 5 THEN 30
+      WHEN p_dias_restantes <= 10 THEN 20
+      WHEN p_dias_restantes <= 15 THEN 10
+      ELSE 5
+    END
+    + COALESCE(FLOOR(p_confianza * 0.3), 0)
+    + CASE WHEN p_requiere_visita = TRUE THEN 30 ELSE 0 END
+  );
+END;
+$$;
+
+
+ALTER FUNCTION public.calcular_prioridad(p_dias_restantes integer, p_confianza numeric, p_requiere_visita boolean) OWNER TO n8n;
+
+--
+-- Name: actualizar_prioridad_trigger(); Type: FUNCTION; Schema: public; Owner: n8n
+--
+
+CREATE FUNCTION public.actualizar_prioridad_trigger() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  v_dias_restantes INTEGER;
+  v_confianza NUMERIC;
+  v_requiere_visita BOOLEAN;
+  v_nuevo_score INTEGER;
+BEGIN
+  -- Obtener datos del llamado
+  SELECT dias_restantes INTO v_dias_restantes
+  FROM llamados
+  WHERE id = NEW.llamado_id;
+
+  -- Usar los datos del análisis actual
+  v_confianza := NEW.confianza;
+  v_requiere_visita := NEW.requiere_visita;
+
+  -- Calcular nuevo score
+  v_nuevo_score := calcular_prioridad(v_dias_restantes, v_confianza, v_requiere_visita);
+
+  -- Actualizar el llamado
+  UPDATE llamados
+  SET prioridad_score = v_nuevo_score
+  WHERE id = NEW.llamado_id;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.actualizar_prioridad_trigger() OWNER TO n8n;
+
+--
 -- Name: analisis_ia trg_actualizar_prioridad; Type: TRIGGER; Schema: public; Owner: n8n
 --
 

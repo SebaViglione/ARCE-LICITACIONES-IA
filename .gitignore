@@ -1,107 +1,57 @@
-# ======================================================
-# 🧠 ARCE-LICITACIONES-IA - .gitignore
-# Proyecto de análisis de pliegos estatales con IA (Ollama + n8n)
-# ======================================================
+# Node modules
+node_modules/
+package-lock.json
 
-# --- 🔒 Archivos sensibles y de entorno ---
+# Environment variables
 .env
-*.env
-*.env.local
-*.key
-*.secret
-*.pem
+.env.local
+.env.*.local
 
-# --- ⚙️ Archivos de configuración locales ---
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*.bak
-*.tmp
-*.lock
+# Runtime data
 *.log
+logs/
 *.pid
-*.cache
-*.temp
-__pycache__/
-*.pyc
+*.seed
+*.pid.lock
 
-# --- 🧱 Salidas del modelo y datos pesados ---
-/ollama-dev/results/
-/ollama-dev/tests/pliegos-tests/
-/ollama-dev/tests/test-real-pdfs/
-/ollama-dev/tests/test-runners/__pycache__/
-/ollama-dev/models/__pycache__/
+# Build outputs
+dist/
+build/
+*.tgz
 
-# --- 📦 Archivos de datos grandes ---
-*.pdf
-*.doc
-*.docx
-*.odt
-*.xls
-*.xlsx
-*.zip
-*.rar
-*.7z
-*.tar
-*.gz
-*.jsonl
-*.sqlite
-*.db
-
-# --- ✅ Excepciones: ejemplos públicos permitidos ---
-!ollama-dev/IA-answer-examples/
-!ollama-dev/IA-answer-examples/*.pdf
-!ollama-dev/IA-answer-examples/*.txt
-
-# --- 🐳 Docker ---
-# ✅ Versionar estos archivos de configuración (forman parte del proyecto)
-!docker-compose*.yml
-!Dockerfile
-!.dockerignore
-
-# ❌ Ignorar contenido generado por los contenedores (runtime)
-docker/volumes/
-docker/logs/
-docker/tmp/
-docker/data/
-docker/cache/
-
-# --- 💻 n8n y flujos ---
-/n8n/.n8n/
-/n8n/.n8n-storage/
-/n8n/executions/
-/n8n/backups/
-/n8n/tmp/
-
-# --- 🧩 IDEs y editores ---
+# IDE
 .vscode/
 .idea/
-*.iml
-*.sublime-project
-*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
 
-# --- 🧪 Testing y entornos virtuales ---
-/tests/__pycache__/
-/coverage/
-/reports/
-/.venv/
-/venv/
-**/node_modules/
-/__pycache__/
+# Data directories
+src/.data/
+tmp/
+n8n_files/
 
-# --- 🔧 Archivos temporales o de respaldo ---
-*.sh~
-*.old
-*.orig
-*.rej
+# Database dumps
+*.sql.gz
+*.dump
+
+# Puppeteer downloads
+.cache/
+chromium/
+
+# Docker volumes
+postgres_data/
+n8n_data/
+
+# Test files
+*.test.js
+coverage/
+
+# Temporary files
 *.tmp
 *.bak
-
-# ======================================================
-# ✅ Mantener públicos solo:
-#    - código fuente
-#    - documentación
-#    - ejemplos IA controlados
-# ======================================================
+*.old
+*_OLD
+*_BACKUP
 
