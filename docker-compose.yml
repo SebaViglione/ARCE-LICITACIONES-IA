@@ -1,91 +1,75 @@
-name: n8n
+name: arce
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: n8n_postgres
+    container_name: arce_postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Definí POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-arce_licitaciones}
+      TZ: ${TZ:-America/Montevideo}
     volumes:
-      - n8n_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Solo en loopback, para desarrollo nativo (npm run pipeline:once) y psql.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     healthcheck:
-      test: [ 'CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}' ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 10
-    networks:
-      - n8n_network
+      retries: 12
 
-  n8n:
-    build: ./src/n8n
-    container_name: n8n_app
-    user: "0"
+  app:
+    build: ./app
+    container_name: arce_app
     restart: unless-stopped
     ports:
-      - "${N8N_PORT}:${N8N_PORT}"
+      - "${PORT:-3000}:3000"
     environment:
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
-      - DB_POSTGRESDB_USER=${POSTGRES_USER}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      - N8N_HOST=${N8N_HOST}
-      - N8N_PORT=${N8N_PORT}
-      - N8N_PROTOCOL=${N8N_PROTOCOL}
-      - NODE_ENV=${NODE_ENV}
-      - WEBHOOK_URL=${WEBHOOK_URL}
-      - N8N_PAYLOAD_SIZE_MAX=${N8N_PAYLOAD_SIZE_MAX}
-      - N8N_METRICS=${N8N_METRICS}
-      - EXECUTIONS_DATA_PRUNE=${EXECUTIONS_DATA_PRUNE}
-      - EXECUTIONS_DATA_MAX_AGE=${EXECUTIONS_DATA_MAX_AGE}
-      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
-      - TZ=${TZ}
-      - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE}
-      - OLLAMA_HOST=${OLLAMA_HOST}
+      NODE_ENV: production
+      PORT: 3000
+      DATA_DIR: /data
+      TZ: ${TZ:-America/Montevideo}
+      TZ_LOCAL: ${TZ:-America/Montevideo}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-arce_licitaciones}
+      # Ollama nativo o en otro contenedor del host (host.docker.internal). Con `--profile ollama` usar http://ollama:11434
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      RUBRO: ${RUBRO:-aluminio}
+      CRON: ${CRON:-*/15 * * * *}
+      CRON_ENABLED: ${CRON_ENABLED:-true}
+      RUN_ON_START: ${RUN_ON_START:-true}
+      MAX_ANALISIS_POR_CORRIDA: ${MAX_ANALISIS_POR_CORRIDA:-50}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - n8n_data:/home/node/.n8n
-      - ./src/n8n/workflows:/files:z
-      - ./src/.data/tmp:/tmp_arce:z
-      - ./src/scraper:/home/n8n/ARCE-LICITACIONES-IA/scraper:z
-      - ./src/processing:/home/n8n/ARCE-LICITACIONES-IA/processing:z
-      - ./database:/home/n8n/ARCE-LICITACIONES-IA/database:z
+      - app_data:/data
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - n8n_network
 
-  dashboard:
-    build: ./src/dashboard
-    container_name: n8n_dashboard
+  # Opcional: Ollama dentro del compose para quien no lo tenga en el host.
+  #   docker compose --profile ollama up -d
+  #   docker compose exec ollama ollama pull qwen3.5:9b
+  # y en .env: OLLAMA_HOST=http://ollama:11434
+  ollama:
+    image: ollama/ollama:0.40.2
+    container_name: arce_ollama
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    profiles: ["ollama"]
+    volumes:
+      - ollama_data:/root/.ollama
     environment:
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGDATABASE=${POSTGRES_DB}
-      - PGUSER=${POSTGRES_USER}
-      - PGPASSWORD=${POSTGRES_PASSWORD}
-      - PORT=3000
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - n8n_network
-
-networks:
-  n8n_network:
-    driver: bridge
+      OLLAMA_KEEP_ALIVE: 30m
 
 volumes:
-  n8n_data:
-  n8n_postgres_data:
-
-
+  postgres_data:
+  app_data:
+  ollama_data:

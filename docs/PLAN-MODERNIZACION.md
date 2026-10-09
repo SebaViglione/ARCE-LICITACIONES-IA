@@ -91,16 +91,16 @@ ARCE-LICITACIONES-IA/
 - [x] Verificación: `npm run build` sin errores.
 
 ### Fase 2. Base de datos
-- [ ] `001_schema_base.sql`: tablas de `database/scheme.sql` (`llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`, `analisis_ia`, `feedback_usuario`), función `calcular_prioridad` y trigger. Quitar `\restrict`, `OWNER`, `SET` de pg_dump.
-- [ ] `002_vista_dashboard.sql`: una sola `v_llamados_dashboard` = `database/create_dashboard_view.sql` (tiene `prioridad_score` y `formularios_requeridos` que usa el frontend) **más** el conteo de archivos de aclaraciones de `migracion_total_archivos.sql`. Eliminar la definición duplicada.
-- [ ] `003_ajustes.sql`:
+- [x] `001_schema_base.sql`: tablas de `database/scheme.sql` (`llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`, `analisis_ia`, `feedback_usuario`), función `calcular_prioridad` y trigger. Quitar `\restrict`, `OWNER`, `SET` de pg_dump.
+- [x] `002_vista_dashboard.sql`: una sola `v_llamados_dashboard` = `database/create_dashboard_view.sql` (tiene `prioridad_score` y `formularios_requeridos` que usa el frontend) **más** el conteo de archivos de aclaraciones de `migracion_total_archivos.sql`. Eliminar la definición duplicada.
+- [x] `003_ajustes.sql`:
   - `analisis_ia.confianza` queda `integer 0-100` (ya está). El fallback debe guardar en esa escala (bug actual: guarda 0.3 → 0).
   - `llamados.estado` agrega `'archivado'` como destino en vez de `DELETE` a los 120 días (conservar histórico para métricas).
   - `llamados.detectado_en` no se pisa en upsert (hoy `DO UPDATE SET detectado_en = now()` borra la fecha original). Agregar `actualizado_en`.
   - `analisis_ia.modelo text` y `analisis_ia.proveedor text` para saber qué modelo generó cada análisis (útil para la demo).
   - `analisis_ia.rubro text default 'aluminio'`.
   - Índice `idx_llamados_estado` que hoy está dentro del SQL de la vista.
-- [ ] Verificación: `docker compose up postgres -d && npm run migrate` crea todo; `psql -c '\d analisis_ia'` muestra columnas nuevas.
+- [x] Verificación: `docker compose up postgres -d && npm run migrate` crea todo; `psql -c '\d analisis_ia'` muestra columnas nuevas.
 
 ### Fase 3. Pipeline de ingesta (RSS → filtro → scraper → BD)
 - [ ] `rss.ts`: URL con rango 60 días (lógica de "Generar rango fechas URL"), `fast-xml-parser`, port de `clean`, `extractFechaHoraApertura`, `splitPubDate` del nodo "Formateo JSON". Fechas `YYYY-MM-DD` se parsean como **local** (`new Date(f + 'T00:00:00')`), no UTC (bug de off-by-one en UTC-3).
@@ -196,3 +196,9 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - `config.ts` valida `process.env` con zod; `DATABASE_URL` es obligatoria (no hay credenciales por defecto en el código). Carga `app/.env` y si no, el `.env` de la raíz.
 - `db/migrate.ts` aplica `migrations/*.sql` en orden dentro de una transacción cada una, con `pg_advisory_lock` y tabla `schema_migrations`.
 - `npm run build` compila sin errores.
+
+### 2026-10-09 · Fase 2
+- Orden final de migraciones: `001_schema_base` → `002_ajustes` → `003_vista_dashboard` (la vista expone `modelo/proveedor/rubro`, así que los ajustes van antes).
+- Extras respecto al plan: `items_llamado` tenía duplicados en cada corrida (no había unicidad) → índice único por `(id_llamado, md5(texto))`; `analisis_ia` guarda además `prompt_tokens`, `duracion_ms`, `chars_enviados` para medir el modelo; tabla `corridas_pipeline` para `/api/pipeline/estado`; check de `estado_seguimiento`.
+- La vista prioriza análisis sobre archivo real por encima de `METADATA_FALLBACK` y ya no filtra por estado (lo hace la API).
+- `docker-compose.yml` nuevo (proyecto `arce`): postgres publicado solo en `127.0.0.1:5433`; `.env` adaptado sin variables de N8N. Verificado: `npm run migrate` aplica 001-003 y es idempotente.
