@@ -130,7 +130,7 @@ ARCE-LICITACIONES-IA/
 - [ ] Verificación: `npm run pipeline:once` sobre 3-5 llamados reales. Revisar que `analisis_ia` tenga `es_relevante` no nulo, `confianza` entre 0 y 100, y que un pliego largo no quede truncado (loggear chars enviados vs `prompt_eval_count` que devuelve Ollama).
 
 ### Fase 5b. Proveedor alternativo Anthropic (opcional, solo si Fase 5 está verde)
-- [ ] `llm/anthropic.ts` con la misma interfaz, usando tool-use/structured output con el mismo JSON Schema. Modelo por env (`ANTHROPIC_MODEL`), default el más capaz vigente según la skill `claude-api`. `LLM_PROVIDER=anthropic` lo activa. Sirve de respaldo si el modelo local es lento en la demo.
+- [x] `llm/anthropic.ts` con la misma interfaz, usando tool-use/structured output con el mismo JSON Schema. Modelo por env (`ANTHROPIC_MODEL`), default el más capaz vigente según la skill `claude-api`. `LLM_PROVIDER=anthropic` lo activa. Sirve de respaldo si el modelo local es lento en la demo.
 
 ### Fase 6. API y dashboard
 - [x] `api/routes.ts`: portar las 3 rutas de `src/dashboard/server.js` (ya usan parámetros, están bien). Agregar:
@@ -230,3 +230,7 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Verificado nativo en :3011 con curl: health ok, listado, detalle, 404, feedback inválido → 400 con detalle zod, feedback válido → snapshot IA, métricas (1 FP tras marcar la puerta de madera como no relevante), 404 de API en JSON, body inválido → 400.
 - `index.ts`: migra con reintentos, levanta API, valida el cron (`node-cron` 4, zona `America/Montevideo`), corrida inicial a los 5 s si `RUN_ON_START`, apagado limpio con SIGTERM.
 - Modelo por defecto cambiado a **`qwen3.5:4b` con `num_ctx` 8192** (ver comparación en Fase 5). `OLLAMA_HOST` (nativo) y `OLLAMA_HOST_DOCKER` (contenedor) separados en `.env`.
+
+### 2026-10-09 · Fase 5b
+- `llm/anthropic.ts` con `@anthropic-ai/sdk` 0.133: `client.beta.messages.create` con `output_config.format = { type: 'json_schema', schema }` (mismo JSON Schema que Ollama), `effort: 'medium'`, `max_tokens` 16000, y `fallbacks: 'default'` + beta `server-side-fallback-2026-07-01` (si un clasificador rechaza, la API reintenta en otro modelo en la misma llamada). Modelo por defecto `claude-opus-5-5` según la skill `claude-api`; `ANTHROPIC_MODEL` lo cambia. Maneja `stop_reason` `refusal`/`max_tokens`, un reintento si no valida, y `salud()` distingue key inválida / modelo inexistente / sin conexión.
+- **No probado contra la API real**: en el host no hay `ANTHROPIC_API_KEY` ni `ant auth`. Verificado por tipado contra el SDK y con 4 tests con cliente simulado (esquema enviado, reintento, rechazo, salud).
