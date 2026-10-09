@@ -1,0 +1,41 @@
+{
+  "name": "arce-licitaciones-ia",
+  "version": "2.0.0",
+  "description": "Monitoreo y análisis con IA de licitaciones de ARCE (comprasestatales.gub.uy): scheduler, pipeline, API y dashboard en un único servicio",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "migrate": "tsx src/db/migrate.ts",
+    "pipeline:once": "tsx src/pipeline/run.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.7",
+    "express": "^5.3.0",
+    "fast-xml-parser": "^5.11.2",
+    "node-cron": "^4.6.0",
+    "ollama": "^0.6.4",
+    "p-limit": "^7.3.3",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "puppeteer": "^25.13.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

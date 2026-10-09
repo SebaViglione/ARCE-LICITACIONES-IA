@@ -84,11 +84,11 @@ ARCE-LICITACIONES-IA/
 - [x] Versionar `package-lock.json` (sacarlo de `.gitignore`).
 
 ### Fase 1. Esqueleto del servicio `app/`
-- [ ] `npm init` en `app/`, deps listadas arriba, `tsconfig` ESM `NodeNext`, scripts: `dev` (tsx watch), `build` (tsc), `start`, `pipeline:once` (`tsx src/pipeline/run.ts`), `migrate`, `test`.
-- [ ] `config.ts` con zod y defaults sensatos. Sin credenciales hardcodeadas en ningún archivo.
-- [ ] `db/pool.ts` + `db/migrate.ts` (lee `migrations/*.sql`, aplica los que falten dentro de una transacción, registra en `schema_migrations`).
-- [ ] Logger pino con nivel por env.
-- [ ] Verificación: `npm run build` sin errores.
+- [x] `npm init` en `app/`, deps listadas arriba, `tsconfig` ESM `NodeNext`, scripts: `dev` (tsx watch), `build` (tsc), `start`, `pipeline:once` (`tsx src/pipeline/run.ts`), `migrate`, `test`.
+- [x] `config.ts` con zod y defaults sensatos. Sin credenciales hardcodeadas en ningún archivo.
+- [x] `db/pool.ts` + `db/migrate.ts` (lee `migrations/*.sql`, aplica los que falten dentro de una transacción, registra en `schema_migrations`).
+- [x] Logger pino con nivel por env.
+- [x] Verificación: `npm run build` sin errores.
 
 ### Fase 2. Base de datos
 - [ ] `001_schema_base.sql`: tablas de `database/scheme.sql` (`llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`, `analisis_ia`, `feedback_usuario`), función `calcular_prioridad` y trigger. Quitar `\restrict`, `OWNER`, `SET` de pg_dump.
@@ -190,3 +190,9 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - En el host faltan `tesseract` y `chromium`; no importa para Docker (van en la imagen) y para el desarrollo nativo Puppeteer baja su propio Chrome. El OCR nativo simplemente falla de forma controlada.
 - Puertos 3000 y 5433 libres en el host.
 - Rama `modernizacion` creada desde `main`; `package-lock.json` sacado de `.gitignore`.
+
+### 2026-10-09 · Fase 1
+- `app/` con Node 22 + TypeScript 7 (ESM `NodeNext`), deps: express 5, pg 8, puppeteer 25, ollama 0.6, fast-xml-parser 5, node-cron 4, zod 4 (trae `z.toJSONSchema`, no hace falta `zod-to-json-schema`), pino 10, dotenv 18, p-limit 7. Dev: tsx, vitest 5, pino-pretty.
+- `config.ts` valida `process.env` con zod; `DATABASE_URL` es obligatoria (no hay credenciales por defecto en el código). Carga `app/.env` y si no, el `.env` de la raíz.
+- `db/migrate.ts` aplica `migrations/*.sql` en orden dentro de una transacción cada una, con `pg_advisory_lock` y tabla `schema_migrations`.
+- `npm run build` compila sin errores.
