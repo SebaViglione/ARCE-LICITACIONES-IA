@@ -111,10 +111,10 @@ ARCE-LICITACIONES-IA/
 - [x] Verificación: `npm run pipeline:once -- --solo-ingesta` deja filas en `llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`. Loggear cuántos candidatos pasaron el filtro vs total del RSS (sanity check: debería ser > 0 y < 30%).
 
 ### Fase 4. Extracción de texto
-- [ ] `descarga.ts`: `fetch` con los mismos headers (UA, Referer) que el `wget` actual, guardar en `DATA_DIR/<llamado_id>/<basename saneado>`. Nunca usar el nombre remoto crudo en el path.
-- [ ] `extract.ts`: port de `extract_text.sh` por extensión: pdf → `pdftotext` y OCR con `tesseract -l spa` si < 50 chars; doc → `antiword` luego `pandoc`; docx/rtf/odt/xls/xlsx/ods → `pandoc -t plain`; txt; zip → `unzip` a tmp y recursión; imágenes → tesseract; rar/7z → error tipado. Todo con `execFile` + timeout 120 s. Devuelve `{ texto, error? }`.
-- [ ] `extract_im.ts`: port de `extract_im_html.sh` (detección de redirect "Haga click aqui", hidden inputs, items y adjuntos de la Intendencia). Inserta items y adjuntos descubiertos vía `repos`.
-- [ ] Verificación: test unitario con un PDF y un DOCX chicos de fixture (generarlos con pandoc en el test o commitear 2 archivos pequeños).
+- [x] `descarga.ts`: `fetch` con los mismos headers (UA, Referer) que el `wget` actual, guardar en `DATA_DIR/<llamado_id>/<basename saneado>`. Nunca usar el nombre remoto crudo en el path.
+- [x] `extract.ts`: port de `extract_text.sh` por extensión: pdf → `pdftotext` y OCR con `tesseract -l spa` si < 50 chars; doc → `antiword` luego `pandoc`; docx/rtf/odt/xls/xlsx/ods → `pandoc -t plain`; txt; zip → `unzip` a tmp y recursión; imágenes → tesseract; rar/7z → error tipado. Todo con `execFile` + timeout 120 s. Devuelve `{ texto, error? }`.
+- [x] `extract_im.ts`: port de `extract_im_html.sh` (detección de redirect "Haga click aqui", hidden inputs, items y adjuntos de la Intendencia). Inserta items y adjuntos descubiertos vía `repos`.
+- [x] Verificación: test unitario con un PDF y un DOCX chicos de fixture (generarlos con pandoc en el test o commitear 2 archivos pequeños).
 
 ### Fase 5. Análisis con IA
 - [ ] `llm/schema.ts`: zod `AnalisisSchema` con los 15 campos actuales (`descripcion_llamado`, `es_relevante`, `confianza` int 0-100, `razon`, `materiales_detectados[]`, `resumen_trabajo`, `ubicacion_obra`, `requiere_visita`, `ubicacion_visita`, `fecha_visita_especifica` (date|null), `coordina_visita`, contactos, `formularios_requeridos[{nombre,obligatorio,seccion}]`). Exportar el JSON Schema para `format`.
@@ -211,3 +211,9 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Dedupe: no se re-scrapea un llamado con `actualizado_en` de hoy; solo se refrescan `dias_restantes`/`urgencia`.
 - Resultado: `pipeline:once --solo-ingesta` → 15 scrapeados en 11 s (concurrencia 2), 10 llamados, 10 adjuntos (4 html IM, 3 docx, 3 pdf), 8 aclaraciones, 9 ítems. 26 tests unitarios (filtro, RSS con fixture real, fechas).
 - Los rubros viven en `app/rubros/*.json` (fuera de `src/` para que lleguen tal cual a `dist/` y a la imagen).
+
+### 2026-10-09 · Fase 4
+- `extract.ts`: `execFile` sin shell, timeout 120 s, `maxBuffer` 64 MB. PDF con `pdftotext -layout`; si trae < 50 chars, OCR con `pdftoppm` (8 páginas a 200 dpi) + `tesseract -l spa`. ZIP con `unzip -j` a un tmp y recursión (profundidad ≤ 2). HTML genérico → texto plano. Errores tipados (`ERROR_*`) como en el bash, más `ERROR_HERRAMIENTA_NO_DISPONIBLE`.
+- Cadena real de la Intendencia de Montevideo relevada con un llamado vivo (D197462): el `.html` de ARCE (263 bytes) redirige a una página Lotus Notes en **ISO-8859-1 sin meta charset**, que no tiene los `<input hidden>` que esperaba el bash (formato viejo; se mantiene soporte) sino una lista de "Comentarios, aclaraciones y modificaciones"; cada comentario es otro documento con el archivo real en `.../$FILE/<NOMBRE>.PDF`. `extract_im.ts` sigue toda la cadena, devuelve el texto de la página + comentarios y **descubre los PDF reales**, que se insertan como adjuntos y se analizan en la misma corrida.
+- Descargas a `DATA_DIR/adjuntos/<id>/<nombre saneado>-<hash8>.<ext>`; nunca se usa el nombre remoto crudo.
+- Fixtures commiteados: PDF mínimo generado a mano (731 bytes), DOCX generado con pandoc, ZIP con ambos, y los 3 HTML reales de la IM. 40 tests verdes (los de pdftotext/pandoc/unzip se saltan si la herramienta no está).
