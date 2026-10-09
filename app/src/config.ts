@@ -40,8 +40,9 @@ const EsquemaEnv = z.object({
 
   // LLM
   LLM_PROVIDER: z.enum(['ollama', 'anthropic']).default('ollama'),
-  LLM_MAX_CHARS: z.coerce.number().int().positive().default(40000),
-  LLM_CHUNK_CHARS: z.coerce.number().int().positive().default(30000),
+  // Si no se definen, se derivan de OLLAMA_NUM_CTX (ver derivarLimites): ~3 chars/token dejando lugar al prompt y a la respuesta.
+  LLM_MAX_CHARS: z.coerce.number().int().positive().optional(),
+  LLM_CHUNK_CHARS: z.coerce.number().int().positive().optional(),
   LLM_CHUNK_OVERLAP: z.coerce.number().int().nonnegative().default(2000),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000),
 
@@ -55,7 +56,15 @@ const EsquemaEnv = z.object({
   ANTHROPIC_MODEL: z.string().optional(),
 });
 
-export type Config = z.infer<typeof EsquemaEnv>;
+type Env = z.infer<typeof EsquemaEnv>;
+export type Config = Omit<Env, 'LLM_MAX_CHARS' | 'LLM_CHUNK_CHARS'> & { LLM_MAX_CHARS: number; LLM_CHUNK_CHARS: number };
+
+/** Reserva ~2500 tokens para instrucciones + respuesta y asume ~3 chars/token en español. */
+export function derivarLimites(numCtx: number, maxChars?: number, chunkChars?: number): { LLM_MAX_CHARS: number; LLM_CHUNK_CHARS: number } {
+  const max = maxChars ?? Math.max(6000, Math.floor((numCtx - 2500) * 3));
+  const chunk = chunkChars ?? Math.max(4000, Math.floor(max * 0.75));
+  return { LLM_MAX_CHARS: max, LLM_CHUNK_CHARS: Math.min(chunk, max) };
+}
 
 function cargarConfig(): Config {
   const resultado = EsquemaEnv.safeParse(process.env);
@@ -63,7 +72,8 @@ function cargarConfig(): Config {
     const detalle = resultado.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Configuración inválida:\n${detalle}`);
   }
-  return resultado.data;
+  const env = resultado.data;
+  return { ...env, ...derivarLimites(env.OLLAMA_NUM_CTX, env.LLM_MAX_CHARS, env.LLM_CHUNK_CHARS) };
 }
 
 export const config: Config = cargarConfig();
