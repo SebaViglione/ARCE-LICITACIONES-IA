@@ -166,10 +166,11 @@
       "Mamparas divisorias, vidrios templados sin aluminio, estructuras metálicas → confianza 50-70"
     ],
     "no_relevante": [
+      "Aberturas, puertas o ventanas de madera, chapa, hierro o PVC sin aluminio ni vidrio (ej: puerta interior de madera) → confianza 70-90 de que NO es relevante",
       "Solo vidrio sin estructura de aluminio (ej: limpieza de vidrios) → confianza 20-40",
       "Mantenimiento sin provisión de materiales → confianza 15-35",
       "Pintura, electricidad, plomería, limpieza, alimentos, sin relación con aluminio → confianza 0-20"
     ],
-    "regla_clave": "Si el llamado NO requiere provisión o instalación de aluminio/aberturas, es_relevante DEBE ser false."
+    "regla_clave": "Si el llamado NO requiere provisión o instalación de aluminio, vidrio o aberturas de aluminio, es_relevante DEBE ser false. Una puerta o ventana de madera, chapa o PVC NO es del rubro."
   }
 }

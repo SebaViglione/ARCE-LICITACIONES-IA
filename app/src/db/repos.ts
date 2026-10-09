@@ -299,3 +299,158 @@ export async function ultimasCorridas(n = 5, db: Queryable = pool): Promise<pg.Q
   const { rows } = await db.query(`SELECT * FROM corridas_pipeline ORDER BY id DESC LIMIT $1`, [n]);
   return rows;
 }
+
+// ---------------------------------------------------------------------------
+// API: listados, detalle, feedback y métricas
+// ---------------------------------------------------------------------------
+
+export interface FiltroLlamados {
+  estado: 'activo' | 'vencido' | 'archivado' | 'todos';
+  rubro: string | null;
+  limit: number;
+  offset: number;
+}
+
+export async function listarLlamados(f: FiltroLlamados, db: Queryable = pool): Promise<pg.QueryResultRow[]> {
+  const { rows } = await db.query(
+    `SELECT l.*, fu.es_relevante_real, fu.estado_seguimiento
+       FROM v_llamados_dashboard l
+       LEFT JOIN feedback_usuario fu ON fu.llamado_id = l.llamado_id
+      WHERE ($1 = 'todos' OR l.estado = $1)
+        AND ($2::text IS NULL OR l.rubro = $2)
+      ORDER BY l.dias_restantes ASC NULLS LAST, l.fecha_apertura ASC NULLS LAST, l.llamado_id
+      LIMIT $3 OFFSET $4`,
+    [f.estado, f.rubro, f.limit, f.offset],
+  );
+  return rows;
+}
+
+export async function detalleLlamado(id: string, db: Queryable = pool): Promise<{ llamado: pg.QueryResultRow; adjuntos: pg.QueryResultRow[]; aclaraciones: pg.QueryResultRow[]; analisis: pg.QueryResultRow[]; items: string[] } | null> {
+  const [l, adj, acl, an, it] = await Promise.all([
+    db.query(
+      `SELECT l.*, fu.es_relevante_real, fu.estado_seguimiento, fu.comentario, fu.ia_es_relevante, fu.ia_confianza, fu.ia_razon, fu.actualizado_en AS feedback_actualizado_en
+         FROM v_llamados_dashboard l LEFT JOIN feedback_usuario fu ON fu.llamado_id = l.llamado_id
+        WHERE l.llamado_id = $1`,
+      [id],
+    ),
+    db.query(`SELECT id, nombre, tipo, archivo_url, label FROM archivos_adjuntos WHERE llamado_id = $1 ORDER BY id`, [id]),
+    db.query(`SELECT id, fecha, hora, texto, archivo_url FROM aclaraciones WHERE id_llamado = $1 ORDER BY fecha DESC NULLS LAST, hora DESC NULLS LAST, id DESC`, [id]),
+    db.query(
+      `SELECT id, archivo_analizado, es_relevante, confianza, descripcion_llamado, errores_extraccion, modelo, proveedor, rubro, prompt_tokens, duracion_ms, chars_enviados, analizado_en
+         FROM analisis_ia WHERE llamado_id = $1 ORDER BY (es_relevante IS NULL), confianza DESC NULLS LAST, analizado_en DESC`,
+      [id],
+    ),
+    db.query<{ texto: string }>(`SELECT texto FROM items_llamado WHERE id_llamado = $1 ORDER BY id`, [id]),
+  ]);
+  if (l.rows.length === 0) return null;
+  return { llamado: l.rows[0]!, adjuntos: adj.rows, aclaraciones: acl.rows, analisis: an.rows, items: it.rows.map((r) => r.texto) };
+}
+
+export interface FeedbackEntrada {
+  llamado_id: string;
+  es_relevante_real: boolean | null;
+  estado_seguimiento: string;
+  comentario: string | null;
+  ia_es_relevante: boolean | null;
+  ia_confianza: number | null;
+  ia_razon: string | null;
+}
+
+export async function mejorAnalisis(llamadoId: string, db: Queryable = pool): Promise<{ es_relevante: boolean; confianza: number | null; razon: string | null } | null> {
+  const { rows } = await db.query<{ es_relevante: boolean; confianza: number | null; razon: string | null }>(
+    `SELECT es_relevante, confianza, razon FROM v_llamados_dashboard WHERE llamado_id = $1 AND es_relevante IS NOT NULL`,
+    [llamadoId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function upsertFeedback(f: FeedbackEntrada, db: Queryable = pool): Promise<pg.QueryResultRow> {
+  const { rows } = await db.query(
+    `INSERT INTO feedback_usuario (llamado_id, es_relevante_real, estado_seguimiento, comentario, ia_es_relevante, ia_confianza, ia_razon, actualizado_en)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (llamado_id) DO UPDATE SET
+       es_relevante_real = EXCLUDED.es_relevante_real,
+       estado_seguimiento = EXCLUDED.estado_seguimiento,
+       comentario = EXCLUDED.comentario,
+       ia_es_relevante = COALESCE(EXCLUDED.ia_es_relevante, feedback_usuario.ia_es_relevante),
+       ia_confianza = COALESCE(EXCLUDED.ia_confianza, feedback_usuario.ia_confianza),
+       ia_razon = COALESCE(EXCLUDED.ia_razon, feedback_usuario.ia_razon),
+       actualizado_en = now()
+     RETURNING *`,
+    [f.llamado_id, f.es_relevante_real, f.estado_seguimiento, f.comentario, f.ia_es_relevante, f.ia_confianza, f.ia_razon],
+  );
+  return rows[0]!;
+}
+
+export interface Metricas {
+  revisados: number;
+  matriz: { tp: number; fp: number; fn: number; tn: number };
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  exactitud: number | null;
+  totales: { llamados_activos: number; con_analisis: number; ia_relevantes: number; adjuntos_pendientes: number; extraccion_fallida: number };
+  por_modelo: Array<{ modelo: string | null; proveedor: string | null; analisis: number; relevantes: number; confianza_promedio: number | null; duracion_promedio_ms: number | null; prompt_tokens_promedio: number | null }>;
+  por_estado_seguimiento: Record<string, number>;
+}
+
+export async function metricas(db: Queryable = pool): Promise<Metricas> {
+  const [m, t, pm, es] = await Promise.all([
+    db.query<{ tp: string; fp: string; fn: string; tn: string; revisados: string }>(
+      `SELECT count(*) FILTER (WHERE ia_es_relevante AND es_relevante_real) AS tp,
+              count(*) FILTER (WHERE ia_es_relevante AND NOT es_relevante_real) AS fp,
+              count(*) FILTER (WHERE NOT ia_es_relevante AND es_relevante_real) AS fn,
+              count(*) FILTER (WHERE NOT ia_es_relevante AND NOT es_relevante_real) AS tn,
+              count(*) AS revisados
+         FROM feedback_usuario WHERE es_relevante_real IS NOT NULL AND ia_es_relevante IS NOT NULL`,
+    ),
+    db.query<{ llamados_activos: string; con_analisis: string; ia_relevantes: string; adjuntos_pendientes: string; extraccion_fallida: string }>(
+      `SELECT (SELECT count(*) FROM llamados WHERE estado = 'activo') AS llamados_activos,
+              (SELECT count(*) FROM v_llamados_dashboard WHERE estado = 'activo' AND es_relevante IS NOT NULL) AS con_analisis,
+              (SELECT count(*) FROM v_llamados_dashboard WHERE estado = 'activo' AND es_relevante) AS ia_relevantes,
+              (SELECT count(*) FROM archivos_adjuntos aa JOIN llamados l ON l.id = aa.llamado_id
+                 LEFT JOIN analisis_ia ai ON ai.llamado_id = aa.llamado_id AND ai.archivo_analizado = aa.nombre
+                WHERE ai.id IS NULL AND l.estado = 'activo' AND aa.tipo = ANY($1::text[])) AS adjuntos_pendientes,
+              (SELECT count(*) FROM analisis_ia WHERE es_relevante IS NULL AND errores_extraccion IS NOT NULL) AS extraccion_fallida`,
+      [TIPOS_EXTRAIBLES],
+    ),
+    db.query<{ modelo: string | null; proveedor: string | null; analisis: string; relevantes: string; confianza_promedio: string | null; duracion_promedio_ms: string | null; prompt_tokens_promedio: string | null }>(
+      `SELECT modelo, proveedor, count(*) AS analisis, count(*) FILTER (WHERE es_relevante) AS relevantes,
+              round(avg(confianza), 1) AS confianza_promedio, round(avg(duracion_ms)) AS duracion_promedio_ms, round(avg(prompt_tokens)) AS prompt_tokens_promedio
+         FROM analisis_ia WHERE es_relevante IS NOT NULL GROUP BY modelo, proveedor ORDER BY analisis DESC`,
+    ),
+    db.query<{ estado_seguimiento: string; n: string }>(`SELECT estado_seguimiento, count(*) AS n FROM feedback_usuario GROUP BY 1`),
+  ]);
+  const r = m.rows[0]!;
+  const tp = Number(r.tp), fp = Number(r.fp), fn = Number(r.fn), tn = Number(r.tn);
+  const div = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 1000 : null);
+  const precision = div(tp, tp + fp);
+  const recall = div(tp, tp + fn);
+  const f1 = precision !== null && recall !== null && precision + recall > 0 ? Math.round(((2 * precision * recall) / (precision + recall)) * 1000) / 1000 : null;
+  const tot = t.rows[0]!;
+  return {
+    revisados: Number(r.revisados),
+    matriz: { tp, fp, fn, tn },
+    precision,
+    recall,
+    f1,
+    exactitud: div(tp + tn, tp + fp + fn + tn),
+    totales: {
+      llamados_activos: Number(tot.llamados_activos),
+      con_analisis: Number(tot.con_analisis),
+      ia_relevantes: Number(tot.ia_relevantes),
+      adjuntos_pendientes: Number(tot.adjuntos_pendientes),
+      extraccion_fallida: Number(tot.extraccion_fallida),
+    },
+    por_modelo: pm.rows.map((x) => ({
+      modelo: x.modelo,
+      proveedor: x.proveedor,
+      analisis: Number(x.analisis),
+      relevantes: Number(x.relevantes),
+      confianza_promedio: x.confianza_promedio === null ? null : Number(x.confianza_promedio),
+      duracion_promedio_ms: x.duracion_promedio_ms === null ? null : Number(x.duracion_promedio_ms),
+      prompt_tokens_promedio: x.prompt_tokens_promedio === null ? null : Number(x.prompt_tokens_promedio),
+    })),
+    por_estado_seguimiento: Object.fromEntries(es.rows.map((x) => [x.estado_seguimiento, Number(x.n)])),
+  };
+}

@@ -133,15 +133,15 @@ ARCE-LICITACIONES-IA/
 - [ ] `llm/anthropic.ts` con la misma interfaz, usando tool-use/structured output con el mismo JSON Schema. Modelo por env (`ANTHROPIC_MODEL`), default el más capaz vigente según la skill `claude-api`. `LLM_PROVIDER=anthropic` lo activa. Sirve de respaldo si el modelo local es lento en la demo.
 
 ### Fase 6. API y dashboard
-- [ ] `api/routes.ts`: portar las 3 rutas de `src/dashboard/server.js` (ya usan parámetros, están bien). Agregar:
+- [x] `api/routes.ts`: portar las 3 rutas de `src/dashboard/server.js` (ya usan parámetros, están bien). Agregar:
   - `GET /api/metricas`: a partir de `feedback_usuario` (`ia_es_relevante` vs `es_relevante_real`): precisión, recall, F1, matriz de confusión, total revisados; más conteos de `analisis_ia` por modelo.
   - `POST /api/pipeline/run`: dispara una corrida (responde 202 si ya hay una en curso). Para la demo en vivo.
   - `GET /api/health`: BD y Ollama alcanzables, modelo cargado.
   - Validar body de `/api/feedback` con zod (`estado_seguimiento` en el enum del frontend).
   - Paginación simple en `/api/llamados` (`?limit&offset`, default 200) y filtro `?rubro`.
-- [ ] `public/`: mover el dashboard actual; agregar card "Precisión IA" en el resumen (`summary-grid` de `index.html`) y un botón "Actualizar ahora" que llama a `/api/pipeline/run`. Mostrar `modelo` en el modal. Nada más de UI (no vale la pena rediseñar a días de la hackathon).
+- [x] `public/`: mover el dashboard actual; agregar card "Precisión IA" en el resumen (`summary-grid` de `index.html`) y un botón "Actualizar ahora" que llama a `/api/pipeline/run`. Mostrar `modelo` en el modal. Nada más de UI (no vale la pena rediseñar a días de la hackathon).
 - [ ] Eliminar `src/dashboard/app.js` (copia vieja de `public/app.js`).
-- [ ] Verificación: `curl /api/health`, `/api/metricas`, abrir `http://localhost:3000` y ver tarjetas con datos reales.
+- [x] Verificación: `curl /api/health`, `/api/metricas`, abrir `http://localhost:3000` y ver tarjetas con datos reales.
 
 ### Fase 7. Docker y arranque en un comando
 - [ ] `app/Dockerfile` multi-stage (`node:22-bookworm-slim`), instala chromium + poppler-utils + pandoc + antiword + tesseract-ocr + tesseract-ocr-spa + unzip + fonts, usuario no root, `HEALTHCHECK` contra `/api/health`.
@@ -223,3 +223,10 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - `llm/ollama.ts`: `generate` con `format=<json schema>`, `options {temperature:0, num_ctx, num_predict}`, `think:false` solo si el modelo declara la capacidad `thinking` (Ollama rechaza el parámetro en modelos sin ella), `keep_alive 30m`, timeout por request vía `fetch` propio, un reintento si la respuesta no valida (y duplica `num_predict` si cortó por largo).
 - `pipeline/analyze.ts`: contexto = título + descripción + ítems + aclaraciones + archivo; chunking por caracteres con solape y conteo real de fragmentos; límites derivados de `OLLAMA_NUM_CTX` (`derivarLimites`: 16k → 41.6k chars, 8k → 17k chars) salvo que `LLM_MAX_CHARS` se fije a mano; errores de extracción quedan registrados en `analisis_ia.errores_extraccion` (sin `es_relevante`) para no reintentar en cada corrida; fallback por metadatos con confianza ≤ 50 para llamados activos sin análisis válido ni adjuntos pendientes; los PDF descubiertos en la IM se analizan en la misma corrida (hasta 3 pasadas dentro del límite).
 - Primer análisis real (llamado D197530, puerta de madera de la IM, 1.681 chars / 1.966 tokens): `llama3.2:3b` tardó 51 s y **se equivocó** (relevante 95 %, inventó "liceo en Salto" copiando el ejemplo del prompt, marcó visita sin base). Saqué el ejemplo concreto del prompt. Ver la comparación de modelos al final de la Fase 5.
+
+### 2026-10-09 · Fase 6
+- Express 5 (`app/src/api`): `GET /api/health` (BD + Ollama: modelo descargado/cargado), `GET /api/llamados?estado&rubro&limit&offset`, `GET /api/llamados/:id` (incluye todos los análisis del llamado e ítems), `POST /api/feedback` (zod; si el cliente no manda `ia_*` se guarda el snapshot del mejor análisis, así las métricas funcionan: el frontend viejo mandaba `null`), `GET /api/metricas` (matriz de confusión, precisión/recall/F1/exactitud, totales, por modelo con duración y tokens promedio), `POST /api/pipeline/run` (202, no bloquea; 202 con `iniciada:false` si ya corre), `GET /api/pipeline/estado`, `GET /api/rubros`.
+- Dashboard: mismo HTML/CSS/JS en `app/public/` + card "Precisión IA" (precision/recall/revisadas), botón "Actualizar ahora" que dispara el pipeline y hace polling del estado cada 5 s, línea de estado de la última corrida, y "Modelo" en el modal. `src/dashboard/app.js` (copia vieja) se va en la Fase 8.
+- Verificado nativo en :3011 con curl: health ok, listado, detalle, 404, feedback inválido → 400 con detalle zod, feedback válido → snapshot IA, métricas (1 FP tras marcar la puerta de madera como no relevante), 404 de API en JSON, body inválido → 400.
+- `index.ts`: migra con reintentos, levanta API, valida el cron (`node-cron` 4, zona `America/Montevideo`), corrida inicial a los 5 s si `RUN_ON_START`, apagado limpio con SIGTERM.
+- Modelo por defecto cambiado a **`qwen3.5:4b` con `num_ctx` 8192** (ver comparación en Fase 5). `OLLAMA_HOST` (nativo) y `OLLAMA_HOST_DOCKER` (contenedor) separados en `.env`.

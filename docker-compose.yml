@@ -35,10 +35,10 @@ services:
       TZ_LOCAL: ${TZ:-America/Montevideo}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-arce_licitaciones}
-      # Ollama nativo o en otro contenedor del host (host.docker.internal). Con `--profile ollama` usar http://ollama:11434
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-16384}
+      # Ollama del host (host.docker.internal) o, con `--profile ollama`, http://ollama:11434
+      OLLAMA_HOST: ${OLLAMA_HOST_DOCKER:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
@@ -58,7 +58,7 @@ services:
   # Opcional: Ollama dentro del compose para quien no lo tenga en el host.
   #   docker compose --profile ollama up -d
   #   docker compose exec ollama ollama pull qwen3.5:9b
-  # y en .env: OLLAMA_HOST=http://ollama:11434
+  # y en .env: OLLAMA_HOST_DOCKER=http://ollama:11434
   ollama:
     image: ollama/ollama:0.40.2
     container_name: arce_ollama

@@ -47,8 +47,8 @@ const EsquemaEnv = z.object({
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000),
 
   OLLAMA_HOST: z.string().default('http://localhost:11434'),
-  OLLAMA_MODEL: z.string().default('qwen3.5:9b'),
-  OLLAMA_NUM_CTX: z.coerce.number().int().positive().default(16384),
+  OLLAMA_MODEL: z.string().default('qwen3.5:4b'),
+  OLLAMA_NUM_CTX: z.coerce.number().int().positive().default(8192),
   OLLAMA_NUM_PREDICT: z.coerce.number().int().positive().default(2048),
   OLLAMA_KEEP_ALIVE: z.string().default('30m'),
 
