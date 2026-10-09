@@ -103,12 +103,12 @@ ARCE-LICITACIONES-IA/
 - [x] Verificación: `docker compose up postgres -d && npm run migrate` crea todo; `psql -c '\d analisis_ia'` muestra columnas nuevas.
 
 ### Fase 3. Pipeline de ingesta (RSS → filtro → scraper → BD)
-- [ ] `rss.ts`: URL con rango 60 días (lógica de "Generar rango fechas URL"), `fast-xml-parser`, port de `clean`, `extractFechaHoraApertura`, `splitPubDate` del nodo "Formateo JSON". Fechas `YYYY-MM-DD` se parsean como **local** (`new Date(f + 'T00:00:00')`), no UTC (bug de off-by-one en UTC-3).
-- [ ] `filtro.ts`: lee `rubros/<RUBRO>.json`. Matching por palabra completa con regex `\b` sobre texto normalizado (NFD sin diacríticos, lowercase). Revisar la lista de exclusión al migrarla: sacar `sobre`, `pan`, `luz`, `led`, `sistema`, `cubierta`, `cable`, `pantalla` como palabras sueltas (hoy matan "sobre la calle", "paneles", "Toledo"); dejar frases ("sobres con ventana", "cubiertas de vehículo"). `diasHasta` y `urgencia` se calculan acá.
-- [ ] `scraper.ts`: port de `src/scraper/scrape_arce.js` a módulo que recibe `(browser, url, id)` y devuelve el mismo JSON. Un solo browser por corrida, concurrencia 2-3 con `p-limit`. Puppeteer con `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`.
-- [ ] Dedupe antes de scrapear: no re-scrapear llamados cuyo `actualizado_en` sea de hoy (hoy se re-scrapea todo el rango de 60 días en cada corrida).
-- [ ] `repos.ts`: upserts parametrizados (`$1, $2...`) equivalentes a los nodos Postgres del workflow nuevo (`src/n8n/workflows/...CON SCRIPT BASH.json`). Marcar vencidos (`estado='vencido'`), archivar a los 120 días.
-- [ ] Verificación: `npm run pipeline:once -- --solo-ingesta` deja filas en `llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`. Loggear cuántos candidatos pasaron el filtro vs total del RSS (sanity check: debería ser > 0 y < 30%).
+- [x] `rss.ts`: URL con rango 60 días (lógica de "Generar rango fechas URL"), `fast-xml-parser`, port de `clean`, `extractFechaHoraApertura`, `splitPubDate` del nodo "Formateo JSON". Fechas `YYYY-MM-DD` se parsean como **local** (`new Date(f + 'T00:00:00')`), no UTC (bug de off-by-one en UTC-3).
+- [x] `filtro.ts`: lee `rubros/<RUBRO>.json`. Matching por palabra completa con regex `\b` sobre texto normalizado (NFD sin diacríticos, lowercase). Revisar la lista de exclusión al migrarla: sacar `sobre`, `pan`, `luz`, `led`, `sistema`, `cubierta`, `cable`, `pantalla` como palabras sueltas (hoy matan "sobre la calle", "paneles", "Toledo"); dejar frases ("sobres con ventana", "cubiertas de vehículo"). `diasHasta` y `urgencia` se calculan acá.
+- [x] `scraper.ts`: port de `src/scraper/scrape_arce.js` a módulo que recibe `(browser, url, id)` y devuelve el mismo JSON. Un solo browser por corrida, concurrencia 2-3 con `p-limit`. Puppeteer con `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`.
+- [x] Dedupe antes de scrapear: no re-scrapear llamados cuyo `actualizado_en` sea de hoy (hoy se re-scrapea todo el rango de 60 días en cada corrida).
+- [x] `repos.ts`: upserts parametrizados (`$1, $2...`) equivalentes a los nodos Postgres del workflow nuevo (`src/n8n/workflows/...CON SCRIPT BASH.json`). Marcar vencidos (`estado='vencido'`), archivar a los 120 días.
+- [x] Verificación: `npm run pipeline:once -- --solo-ingesta` deja filas en `llamados`, `archivos_adjuntos`, `aclaraciones`, `items_llamado`. Loggear cuántos candidatos pasaron el filtro vs total del RSS (sanity check: debería ser > 0 y < 30%).
 
 ### Fase 4. Extracción de texto
 - [ ] `descarga.ts`: `fetch` con los mismos headers (UA, Referer) que el `wget` actual, guardar en `DATA_DIR/<llamado_id>/<basename saneado>`. Nunca usar el nombre remoto crudo en el path.
@@ -202,3 +202,12 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Extras respecto al plan: `items_llamado` tenía duplicados en cada corrida (no había unicidad) → índice único por `(id_llamado, md5(texto))`; `analisis_ia` guarda además `prompt_tokens`, `duracion_ms`, `chars_enviados` para medir el modelo; tabla `corridas_pipeline` para `/api/pipeline/estado`; check de `estado_seguimiento`.
 - La vista prioriza análisis sobre archivo real por encima de `METADATA_FALLBACK` y ya no filtra por estado (lo hace la API).
 - `docker-compose.yml` nuevo (proyecto `arce`): postgres publicado solo en `127.0.0.1:5433`; `.env` adaptado sin variables de N8N. Verificado: `npm run migrate` aplica 001-003 y es idempotente.
+
+### 2026-10-09 · Fase 3
+- RSS real: 1000 ítems (el portal corta en 1000), 15-20 candidatos (~2%). Las descripciones vienen en CDATA con entidades HTML (`&Uacute;`, `&sol;`, `&nbsp;`): se decodifican en `utils/texto.ts`.
+- Fechas: todo en zona `America/Montevideo` vía `Intl` (`TZ_LOCAL`), independiente del TZ del proceso; `dias_restantes` por diferencia de días calendario.
+- Keywords: saqué `marco`/`marcos` sueltos (5 de 20 candidatos eran "en el marco del programa…") y agregué `marcos de aluminio`, `marcos de ventana(s)`, etc. Exclusiones sin `sobre`, `pan`, `luz`, `led`, `sistema`, `cubierta(s)`, `cable`, `pantalla`. Por eso ahora pasan el pre-filtro cosas como "cables de aluminio" o "panel LED": las descarta la IA.
+- Filtro post-scraping por ítems (port del nodo "Filtro items keyword"): descartó 5 de 15. Los rechazados se recuerdan en memoria por día para no re-scrapearlos cada 15 min.
+- Dedupe: no se re-scrapea un llamado con `actualizado_en` de hoy; solo se refrescan `dias_restantes`/`urgencia`.
+- Resultado: `pipeline:once --solo-ingesta` → 15 scrapeados en 11 s (concurrencia 2), 10 llamados, 10 adjuntos (4 html IM, 3 docx, 3 pdf), 8 aclaraciones, 9 ítems. 26 tests unitarios (filtro, RSS con fixture real, fechas).
+- Los rubros viven en `app/rubros/*.json` (fuera de `src/` para que lleguen tal cual a `dist/` y a la imagen).
