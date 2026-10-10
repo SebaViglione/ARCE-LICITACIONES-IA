@@ -25,6 +25,8 @@ services:
     build: ./app
     container_name: arce_app
     restart: unless-stopped
+    # init (tini) para que los procesos de Chromium que quedan zombies tras cada scraping se recojan
+    init: true
     ports:
       - "${PORT:-3000}:3000"
     environment:

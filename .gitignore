@@ -1,24 +1,26 @@
-# Node modules
+# Dependencias y build
 node_modules/
+dist/
+*.tgz
 
-# Environment variables
+# Entorno
 .env
 .env.local
 .env.*.local
 
-# Runtime data
+# Datos en runtime (adjuntos descargados cuando se corre nativo)
+data/
+tmp/
+
+# Logs y temporales
 *.log
 logs/
 *.pid
-*.seed
-*.pid.lock
+*.tmp
+*.bak
+*.old
 
-# Build outputs
-dist/
-build/
-*.tgz
-
-# IDE
+# IDE / SO
 .vscode/
 .idea/
 *.swp
@@ -26,32 +28,9 @@ build/
 *~
 .DS_Store
 
-# Data directories
-data/
-src/.data/
-tmp/
-n8n_files/
-
-# Database dumps
-*.sql.gz
-*.dump
-
-# Puppeteer downloads
-.cache/
-chromium/
-
-# Docker volumes
-postgres_data/
-n8n_data/
-
-# Test files
-*.test.js
+# Cobertura de tests
 coverage/
 
-# Temporary files
-*.tmp
-*.bak
-*.old
-*_OLD
-*_BACKUP
-
+# Dumps de base de datos
+*.sql.gz
+*.dump

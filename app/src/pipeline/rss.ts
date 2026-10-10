@@ -28,10 +28,22 @@ export function construirUrlRss(dias: number, tz: string, ahora: Date = new Date
   return `https://www.comprasestatales.gub.uy/consultas/rss/tipo-pub/ALL/tipo-fecha/PUB/orden/ORD_PUB/tipo-orden/DESC/rango-fecha/${rango}`;
 }
 
-export async function descargarRss(url: string, timeoutMs = 60_000): Promise<string> {
-  const res = await fetch(url, { headers: RSS_HEADERS, signal: AbortSignal.timeout(timeoutMs) });
-  if (!res.ok) throw new Error(`RSS respondió HTTP ${res.status}`);
-  return res.text();
+/** Descarga el RSS con reintentos (la red del contenedor puede tardar unos segundos en estar lista; el portal a veces corta). */
+export async function descargarRss(url: string, timeoutMs = 60_000, intentos = 3): Promise<string> {
+  let ultimo: unknown;
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      const res = await fetch(url, { headers: RSS_HEADERS, signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) throw new Error(`RSS respondió HTTP ${res.status}`);
+      const xml = await res.text();
+      if (!/<rss[\s>]/i.test(xml)) throw new Error('la respuesta no parece un RSS');
+      return xml;
+    } catch (err) {
+      ultimo = err;
+      if (i < intentos) await new Promise((r) => setTimeout(r, 5_000 * i));
+    }
+  }
+  throw new Error(`No se pudo descargar el RSS tras ${intentos} intentos: ${ultimo instanceof Error ? ultimo.message : String(ultimo)}`);
 }
 
 const RE_APERTURA = /Recepci(?:ó|o)n de ofertas hasta:\s*([0-3]?\d\/[01]?\d\/\d{4})\s+(\d{1,2}:\d{2})\s*h?s?/i;

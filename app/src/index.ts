@@ -44,9 +44,10 @@ async function main(): Promise<void> {
   }
 
   if (config.RUN_ON_START) {
+    // 15 s: la red del contenedor recién creado puede tardar unos segundos en salir a internet
     setTimeout(() => {
       void runPipeline({ origen: 'inicio' }).catch((err) => logger.error({ err }, 'corrida inicial falló'));
-    }, 5000);
+    }, 15_000);
   }
 
   let cerrando = false;

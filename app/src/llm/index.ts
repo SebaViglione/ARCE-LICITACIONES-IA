@@ -55,6 +55,15 @@ export async function getProveedor(): Promise<ProveedorLlm> {
 }
 
 export function resumenError(err: unknown, max = 300): string {
-  const msg = err instanceof Error ? err.message : String(err);
+  let msg: string;
+  if (err instanceof AggregateError) {
+    // p. ej. ECONNREFUSED en IPv4 e IPv6: el mensaje propio viene vacío
+    msg = err.message || err.errors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ');
+  } else if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    msg = err.message || (code ? `error ${code}` : err.name);
+  } else {
+    msg = String(err);
+  }
   return msg.replace(/\s+/g, ' ').slice(0, max);
 }

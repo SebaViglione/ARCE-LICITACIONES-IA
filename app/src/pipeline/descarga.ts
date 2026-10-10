@@ -41,7 +41,17 @@ export async function descargarAdjunto(url: string, llamadoId: string, nombre: s
   await fs.mkdir(dir, { recursive: true });
   const ruta = path.join(dir, nombreSeguro(nombre, url));
 
-  const res = await fetch(url, { headers: DESCARGA_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+  let res: Response | null = null;
+  for (let intento = 1; intento <= 2; intento++) {
+    try {
+      res = await fetch(url, { headers: DESCARGA_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) });
+      break;
+    } catch (err) {
+      if (intento === 2) throw err;
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+  }
+  if (!res) throw new Error(`sin respuesta al descargar ${url}`);
   if (!res.ok) throw new Error(`HTTP ${res.status} al descargar ${url}`);
   const largo = Number(res.headers.get('content-length') ?? 0);
   if (largo > MAX_BYTES) throw new Error(`Archivo demasiado grande (${largo} bytes)`);

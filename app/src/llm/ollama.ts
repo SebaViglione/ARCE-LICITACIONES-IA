@@ -21,9 +21,12 @@ export class ProveedorOllama implements ProveedorLlm {
   private thinking: boolean | null = null;
   private preparado = false;
 
-  constructor() {
-    this.cliente = new Ollama({ host: config.OLLAMA_HOST, fetch: fetchConTimeout(config.LLM_TIMEOUT_MS) });
+  constructor(cliente?: Ollama, opciones: { esperaReintentoMs?: number } = {}) {
+    this.cliente = cliente ?? new Ollama({ host: config.OLLAMA_HOST, fetch: fetchConTimeout(config.LLM_TIMEOUT_MS) });
+    this.esperaReintentoMs = opciones.esperaReintentoMs ?? 10_000;
   }
+
+  private readonly esperaReintentoMs: number;
 
   private async capacidades(): Promise<string[]> {
     const info = (await this.cliente.show({ model: this.modelo })) as unknown as { capabilities?: string[] };
@@ -63,6 +66,28 @@ export class ProveedorOllama implements ProveedorLlm {
     }
   }
 
+  /** Errores transitorios del runner de Ollama (p. ej. "unexpected EOF" cuando el proceso del modelo se reinicia por memoria). */
+  private static esTransitorio(err: unknown): boolean {
+    const msg = resumenError(err).toLowerCase();
+    return /unexpected eof|econnreset|econnrefused|socket hang up|fetch failed|timeout|server busy|503|502|500/.test(msg);
+  }
+
+  private async generarConReintento(req: Parameters<Ollama['generate']>[0] & { stream: false }) {
+    let ultimo: unknown;
+    for (let i = 1; i <= 3; i++) {
+      try {
+        return await this.cliente.generate(req);
+      } catch (err) {
+        ultimo = err;
+        if (!ProveedorOllama.esTransitorio(err) || i === 3) throw err;
+        const espera = this.esperaReintentoMs * i;
+        logger.warn({ intento: i, espera_ms: espera, error: resumenError(err) }, 'error transitorio de Ollama; reintentando');
+        await new Promise((r) => setTimeout(r, espera));
+      }
+    }
+    throw ultimo;
+  }
+
   async generarJson<T>(pedido: PedidoJson<T>): Promise<RespuestaJson<T>> {
     const thinking = await this.soportaThinking();
     let prompt = pedido.prompt;
@@ -74,7 +99,7 @@ export class ProveedorOllama implements ProveedorLlm {
 
     for (let intento = 1; intento <= 2; intento++) {
       const t0 = Date.now();
-      const res = await this.cliente.generate({
+      const res = await this.generarConReintento({
         model: this.modelo,
         system: pedido.system,
         prompt,
