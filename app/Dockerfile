@@ -5,8 +5,12 @@ WORKDIR /app
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 COPY package.json package-lock.json ./
 RUN npm ci
+COPY web/package.json web/package-lock.json ./web/
+RUN npm --prefix web ci
 COPY tsconfig.json ./
 COPY src ./src
+COPY web ./web
+# Compila el servidor (dist/) y el dashboard React (public/)
 RUN npm run build && npm prune --omit=dev
 
 # ---------- Etapa 2: runtime ----------
@@ -37,7 +41,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
 COPY migrations ./migrations
-COPY public ./public
+COPY --from=build /app/public ./public
 COPY rubros ./rubros
 
 RUN mkdir -p /data && chown -R node:node /data /app

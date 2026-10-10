@@ -272,3 +272,9 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 ### 2026-10-09 · Fase 9 (stretch)
 - `app/rubros/informatica.json` como segundo rubro: mismo formato, sin tocar código. Test `rubros.test.ts` verifica que todos los rubros del directorio cargan y que sus criterios llegan al prompt (63 tests en total).
 - Telegram y "preguntale al pliego" quedan fuera a propósito.
+
+### 2026-10-10 · Dashboard nuevo (pedido de Seba, fuera del plan original)
+- Primero una versión en HTML/JS vanilla con layout de bandeja; Seba la vio "muy AI slop" y pidió React con React Bits y Elephant UI.
+- Elephant UI (`@ttab/elephant-ui`) es un envoltorio de shadcn/ui publicado en GitHub Packages que exige token de GitHub para instalarse: inviable para `docker compose up --build`. Se usó shadcn/ui directo (estilo `base-nova`, Base UI) + React Bits (`CountUp`, `AnimatedContent`, `SpotlightCard`, `ShinyText`) instalados por el registro de shadcn.
+- `app/web/`: Vite 8 + React 19 + TypeScript + Tailwind 4. Compila a `app/public/` (ya no se versiona); el Dockerfile lo construye en la etapa de build. Tipografía Archivo variable (eje de ancho), tema único grafito + acento "canto de vidrio".
+- Layout: barra con estado del pipeline y KPIs animados (activos, del rubro según la IA, revisados, precisión), bandeja con búsqueda, filtros, orden, gráfico de aperturas de los próximos 30 días y lista agrupada por plazo; ficha con veredicto de la IA, titular, datos, qué piden, materiales, visita técnica, formularios, adjuntos, aclaraciones y la decisión humana fija al pie. Flechas del teclado para moverse; móvil con lista/ficha alternadas.

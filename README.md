@@ -91,12 +91,17 @@ Los análisis guardan el rubro con el que se hicieron; `/api/llamados?rubro=<nue
 ```bash
 docker compose up postgres -d
 cd app && npm install            # baja Chrome para Puppeteer
+npm --prefix web install         # dependencias del dashboard (React)
 npm run migrate
 npm run pipeline:once -- --solo-ingesta      # RSS → filtro → scraper → BD
 npm run pipeline:once -- --solo-analisis --limite=3
+npm run build:web                # compila el dashboard en app/public (lo sirve Express)
 npm run dev                      # API + dashboard + cron en http://localhost:3000
+npm run dev:web                  # (opcional) Vite con recarga en caliente en http://localhost:5173, proxy a :3000
 npm test                         # vitest: filtro, RSS, fechas, extracción, esquema IA
 ```
+
+El dashboard es una bandeja de triage (lista por plazo a la izquierda, ficha y decisión a la derecha) hecha con Vite + React 19 + Tailwind 4, componentes de [shadcn/ui](https://ui.shadcn.com) y animaciones de [React Bits](https://reactbits.dev). Vive en `app/web/` y se compila dentro de `app/public/`, que no se versiona: lo genera `npm run build` y la imagen Docker.
 
 Para el OCR nativo hace falta `tesseract` con el idioma español; `pdftotext`, `pandoc`, `antiword` y `unzip` para el resto. Dentro de la imagen Docker ya están.
 
@@ -112,7 +117,7 @@ app/
   src/db/               pool, migrate, repos (SQL parametrizado)
   rubros/               configuración por rubro
   migrations/           SQL versionado (schema_migrations)
-  public/               dashboard
+  web/                  dashboard React (Vite + shadcn/ui + React Bits); compila a public/
   test/                 vitest + fixtures (RSS real, PDF/DOCX/ZIP, HTML de la IM)
 docker-compose.yml      postgres + app (+ ollama con --profile ollama)
 docs/                   ARQUITECTURA.md, PLAN-MODERNIZACION.md

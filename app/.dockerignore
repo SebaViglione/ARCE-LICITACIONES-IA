@@ -1,4 +1,7 @@
 node_modules
+web/node_modules
+web/dist
+public
 dist
 .env
 test

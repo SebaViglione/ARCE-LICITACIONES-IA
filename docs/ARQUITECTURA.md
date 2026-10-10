@@ -27,7 +27,7 @@ Un único servicio Node 22 + TypeScript (`app/`) contiene el scheduler, el pipel
    │                                                                                        │
    │  api/  Express 5: /api/llamados · /api/llamados/:id · /api/feedback · /api/metricas     │
    │                   /api/pipeline/run · /api/pipeline/estado · /api/health · /api/rubros  │
-   │  public/  dashboard (HTML + JS vanilla): tarjetas, modal, feedback humano, precisión IA │
+   │  web/ → public/  dashboard React: bandeja por plazo, ficha, decisión humana, precisión IA│
    └──────────────────────────────────────┬─────────────────────────────────────────────────┘
                                           │ pg
                                           ▼

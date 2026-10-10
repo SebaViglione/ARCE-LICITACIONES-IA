@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Archivo variable (eje de ancho 62-125): condensada para números y metadatos, normal para el cuerpo. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: italic;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo-italic.woff2') format('woff2');
+}
+
+@theme inline {
+  --font-sans: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Colores propios del tablero */
+  --color-vidrio: var(--vidrio);
+  --color-vidrio-tinta: var(--vidrio-tinta);
+  --color-ambar: var(--ambar);
+  --color-rojo: var(--rojo);
+  --color-azul: var(--azul);
+  --color-texto-3: var(--texto-3);
+  --color-superficie-3: var(--superficie-3);
+}
+
+/* Tema único: grafito frío (perfil de aluminio) con el canto del vidrio como acento. */
+:root,
+.dark {
+  --background: #1a1e23;
+  --foreground: #e6eaee;
+  --card: #22272e;
+  --card-foreground: #e6eaee;
+  --popover: #262c34;
+  --popover-foreground: #e6eaee;
+  --primary: #5cc3a9;
+  --primary-foreground: #0e3a31;
+  --secondary: #2b313a;
+  --secondary-foreground: #e6eaee;
+  --muted: #2b313a;
+  --muted-foreground: #9aa4af;
+  --accent: #2b313a;
+  --accent-foreground: #e6eaee;
+  --destructive: #e4604d;
+  --border: #39414b;
+  --input: #39414b;
+  --ring: #5cc3a9;
+  --chart-1: #5cc3a9;
+  --chart-2: #e3a93b;
+  --chart-3: #e4604d;
+  --chart-4: #7fb4f0;
+  --chart-5: #9aa4af;
+  --radius: 0.5rem;
+  --sidebar: #22272e;
+  --sidebar-foreground: #e6eaee;
+  --sidebar-primary: #5cc3a9;
+  --sidebar-primary-foreground: #0e3a31;
+  --sidebar-accent: #2b313a;
+  --sidebar-accent-foreground: #e6eaee;
+  --sidebar-border: #39414b;
+  --sidebar-ring: #5cc3a9;
+
+  --vidrio: #5cc3a9;
+  --vidrio-tinta: #0e3a31;
+  --ambar: #e3a93b;
+  --rojo: #e4604d;
+  --azul: #7fb4f0;
+  --texto-3: #6f7a86;
+  --superficie-3: #343c46;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-variation-settings: 'wdth' 100;
+  }
+}
+
+@utility condensada {
+  font-variation-settings: 'wdth' 78;
+}
+@utility angosta {
+  font-variation-settings: 'wdth' 90;
+}
+
+/* Scrollbars discretos en las dos columnas */
+.scroll-fino {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
