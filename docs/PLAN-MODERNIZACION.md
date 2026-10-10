@@ -140,7 +140,7 @@ ARCE-LICITACIONES-IA/
   - Validar body de `/api/feedback` con zod (`estado_seguimiento` en el enum del frontend).
   - Paginación simple en `/api/llamados` (`?limit&offset`, default 200) y filtro `?rubro`.
 - [x] `public/`: mover el dashboard actual; agregar card "Precisión IA" en el resumen (`summary-grid` de `index.html`) y un botón "Actualizar ahora" que llama a `/api/pipeline/run`. Mostrar `modelo` en el modal. Nada más de UI (no vale la pena rediseñar a días de la hackathon).
-- [ ] Eliminar `src/dashboard/app.js` (copia vieja de `public/app.js`).
+- [x] Eliminar `src/dashboard/app.js` (copia vieja de `public/app.js`).
 - [x] Verificación: `curl /api/health`, `/api/metricas`, abrir `http://localhost:3000` y ver tarjetas con datos reales.
 
 ### Fase 7. Docker y arranque en un comando
@@ -156,10 +156,10 @@ ARCE-LICITACIONES-IA/
   5. Dashboard muestra tarjetas; guardar un feedback desde el modal; `/api/metricas` lo refleja.
 
 ### Fase 8. Limpieza (solo si Fase 7 pasó)
-- [ ] Borrar `src/n8n/`, `src/processing/`, `scripts/` (salvo lo que tenga sentido como `scripts/dev-*.sh`), `src/dashboard/`, `src/scraper/`, `database/` (ya migrado a `app/migrations`). Mover a `legacy/` NO: el historial de git alcanza.
-- [ ] Quitar la contraseña `n8n_secure_password_2024` de cualquier `.md` que quede.
-- [ ] `.gitignore` actualizado (`app/node_modules`, `app/dist`, `data/`, `.env`).
-- [ ] Commit final y resumen en `docs/PLAN-MODERNIZACION.md` → sección Bitácora con: qué se hizo, qué quedó pendiente, tiempos del pipeline (cuánto tarda analizar un pliego con el modelo elegido).
+- [x] Borrar `src/n8n/`, `src/processing/`, `scripts/` (salvo lo que tenga sentido como `scripts/dev-*.sh`), `src/dashboard/`, `src/scraper/`, `database/` (ya migrado a `app/migrations`). Mover a `legacy/` NO: el historial de git alcanza.
+- [x] Quitar la contraseña vieja de N8N de cualquier `.md` que quede (estaba solo en los README de `src/` y `scripts/`, borrados).
+- [x] `.gitignore` actualizado (`app/node_modules`, `app/dist`, `data/`, `.env`).
+- [x] Commit final y resumen en `docs/PLAN-MODERNIZACION.md` → sección Bitácora con: qué se hizo, qué quedó pendiente, tiempos del pipeline (cuánto tarda analizar un pliego con el modelo elegido).
 
 ### Fase 9. Stretch para la hackathon (solo con todo lo anterior verde)
 - [ ] Segundo rubro de ejemplo (`rubros/construccion.json` o `it.json`) para demostrar que es configurable.
@@ -253,3 +253,18 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Resultado con la imagen final: RSS 1000 → 15 candidatos → 10 llamados → 13 análisis (3 PDF descubiertos en la IM), **0 errores**, 0 extracciones fallidas, 39,5 min. Tiempos por adjunto: 34-57 s los chicos, 110 s el PDF con OCR, 604-631 s los tres pliegos largos (6-7 fragmentos). Ollama volvió a reiniciarse por OOM una vez a mitad de un pliego largo y el reintero nuevo lo absorbió sin perder el análisis.
 - Claude Code detuvo mis esperas en segundo plano por falta de memoria del host (swap lleno mientras corría `llama-server`); no afecta al sistema, solo a cómo se vigiló la corrida. Para la demo conviene tener ~6 GB libres (parar los stacks de Supabase si no se usan).
 - `init: true` en el servicio `app` para recoger los procesos zombi de Chromium que deja cada scraping.
+
+### 2026-10-09 · Fase 8 · limpieza y resumen final
+
+**Qué se hizo.** N8N y los 1.239 líneas de bash quedaron reemplazados por un único servicio Node 22 + TypeScript en `app/` (scheduler con node-cron, pipeline, API Express 5 y dashboard), con PostgreSQL 16 al lado y Ollama en el host (o perfil `ollama` del compose). Borrados `src/` (n8n, processing, dashboard, scraper), `scripts/*` salvo `scripts/dev-verificar.sh`, y `database/` (migrado a `app/migrations`). Commits por fase en la rama `modernizacion` (sin push).
+
+**Estado final verificado.** `docker compose down -v && docker compose up --build -d` → `/api/health` OK → corrida completa en 39,5 min: 1000 ítems de RSS, 15 candidatos, 10 llamados, 13 análisis con `qwen3.5:4b`, 0 errores → feedback y métricas funcionando. 61 tests unitarios verdes (`cd app && npm test`).
+
+**Tiempos del pipeline (CPU, `qwen3.5:4b`, `num_ctx` 8192).** Ingesta (RSS + 15 scrapes): ~15 s. Por adjunto: 34-61 s para pliegos de 1,3-3,9 k caracteres; ~110 s para un PDF escaneado con OCR; 600-630 s para pliegos de 60-73 k caracteres (6-7 fragmentos + síntesis). Con `qwen3.5:9b` en este host (RAM al límite) la generación cae a 2 tok/s: solo conviene con ≥ 8 GB libres.
+
+**Qué quedó pendiente / a decidir.**
+- Proveedor Anthropic implementado pero sin probar contra la API real (no había credenciales en el host).
+- La precisión de la IA se mide recién cuando haya feedback humano: hay que revisar llamados en el dashboard antes de la demo para que la card "Precisión IA" muestre un número.
+- Casos discutibles del modelo (escalera de aluminio, mantenimiento edilicio) se pueden afinar editando los criterios en `app/rubros/aluminio.json` sin tocar código.
+- Memoria del host: con los stacks de Supabase corriendo, Ollama se reinicia por OOM de vez en cuando (la app lo reintenta). Para la demo, liberar RAM o usar una máquina con GPU.
+- Stretch de la Fase 9: segundo rubro de ejemplo sí; Telegram y "preguntale al pliego" no se hicieron (riesgo alto a días de la hackathon).
