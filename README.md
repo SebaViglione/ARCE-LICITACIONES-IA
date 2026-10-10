@@ -66,7 +66,7 @@ dashboard ◄── API Express ◄── analisis_ia ◄── LLM (Ollama / An
 1. Copiar `app/rubros/aluminio.json` a `app/rubros/<nuevo>.json` y editar `descripcion`, `keywords`, `exclusiones`, `materiales_ejemplo` y los criterios de `relevancia` (son texto libre: van directo al prompt).
 2. `RUBRO=<nuevo>` en `.env` y `docker compose up -d --build`.
 
-Los análisis guardan el rubro con el que se hicieron; `/api/llamados?rubro=<nuevo>` filtra por él.
+Los análisis guardan el rubro con el que se hicieron; `/api/llamados?rubro=<nuevo>` filtra por él. Viene un segundo rubro de ejemplo, `informatica`, para probar el cambio (`RUBRO=informatica`).
 
 ## Cambiar de modelo o proveedor
 

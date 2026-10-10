@@ -162,7 +162,7 @@ ARCE-LICITACIONES-IA/
 - [x] Commit final y resumen en `docs/PLAN-MODERNIZACION.md` → sección Bitácora con: qué se hizo, qué quedó pendiente, tiempos del pipeline (cuánto tarda analizar un pliego con el modelo elegido).
 
 ### Fase 9. Stretch para la hackathon (solo con todo lo anterior verde)
-- [ ] Segundo rubro de ejemplo (`rubros/construccion.json` o `it.json`) para demostrar que es configurable.
+- [x] Segundo rubro de ejemplo: `app/rubros/informatica.json` (46 keywords; sobre el RSS real da 24 candidatos de 1000). Se activa con `RUBRO=informatica`.
 - [ ] Notificación por Telegram/email de nuevos relevantes (un webhook simple).
 - [ ] "Preguntale al pliego": embeddings con `nomic-embed-text` en pgvector + endpoint `/api/llamados/:id/preguntar`. Es lo más vistoso para la demo pero también lo más riesgoso; dejar para último.
 
@@ -268,3 +268,7 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Casos discutibles del modelo (escalera de aluminio, mantenimiento edilicio) se pueden afinar editando los criterios en `app/rubros/aluminio.json` sin tocar código.
 - Memoria del host: con los stacks de Supabase corriendo, Ollama se reinicia por OOM de vez en cuando (la app lo reintenta). Para la demo, liberar RAM o usar una máquina con GPU.
 - Stretch de la Fase 9: segundo rubro de ejemplo sí; Telegram y "preguntale al pliego" no se hicieron (riesgo alto a días de la hackathon).
+
+### 2026-10-09 · Fase 9 (stretch)
+- `app/rubros/informatica.json` como segundo rubro: mismo formato, sin tocar código. Test `rubros.test.ts` verifica que todos los rubros del directorio cargan y que sus criterios llegan al prompt (63 tests en total).
+- Telegram y "preguntale al pliego" quedan fuera a propósito.

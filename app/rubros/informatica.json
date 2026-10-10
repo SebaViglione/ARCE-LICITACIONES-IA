@@ -1,0 +1,33 @@
+{
+  "nombre": "informatica",
+  "descripcion": "empresa de servicios informáticos (equipamiento, redes, licencias de software y desarrollo)",
+  "keywords": [
+    "software", "licencia", "licencias", "notebook", "notebooks", "computadora", "computadoras", "pc", "servidor", "servidores",
+    "impresora", "impresoras", "monitor", "monitores", "red de datos", "cableado estructurado", "switch", "switches", "router", "routers",
+    "firewall", "antivirus", "almacenamiento", "storage", "backup", "respaldo", "virtualización", "nube", "cloud", "hosting",
+    "desarrollo de software", "sistema de gestión", "aplicación web", "aplicación móvil", "soporte técnico", "mesa de ayuda",
+    "tablet", "tablets", "scanner", "escáner", "ups", "datacenter", "centro de datos", "wifi", "access point", "telefonía ip"
+  ],
+  "exclusiones": [
+    "alimento", "alimentos", "comida", "catering", "vianda", "viandas", "medicamento", "medicamentos", "jeringa", "jeringas",
+    "uniforme", "uniformes", "calzado", "neumático", "neumáticos", "combustible", "pintura", "cemento", "hormigón",
+    "aluminio", "ventanas", "aberturas", "vidrio", "vidrios", "limpieza", "jardinería", "seguridad física", "vigilancia"
+  ],
+  "materiales_ejemplo": ["notebooks", "servidores", "switches", "licencias de software", "impresoras", "UPS", "cableado UTP", "access points"],
+  "relevancia": {
+    "relevante": [
+      "Compra de equipamiento informático (notebooks, PC, servidores, storage, impresoras, monitores, UPS) → confianza 80-95",
+      "Licencias de software, suscripciones cloud, antivirus, hosting → confianza 80-95",
+      "Redes: cableado estructurado, switches, routers, firewalls, wifi, telefonía IP → confianza 75-90",
+      "Desarrollo o mantenimiento de software, sistemas de gestión, aplicaciones web/móviles, soporte técnico o mesa de ayuda → confianza 70-90"
+    ],
+    "parcial": [
+      "Equipos electrónicos genéricos (proyectores, pantallas, cámaras) o consultorías con componente informático menor → confianza 50-70"
+    ],
+    "no_relevante": [
+      "Obra civil, mobiliario, vehículos, alimentos, salud, limpieza o vigilancia sin componente informático → confianza 80-100 de que NO es relevante",
+      "Servicios profesionales no técnicos (capacitación general, publicidad, eventos) → confianza 70-90 de que NO es relevante"
+    ],
+    "regla_clave": "Si el llamado NO requiere provisión de equipamiento informático, software, redes o servicios de TI, es_relevante DEBE ser false."
+  }
+}
