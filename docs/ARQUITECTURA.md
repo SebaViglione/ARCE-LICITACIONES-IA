@@ -65,3 +65,19 @@ Un único servicio Node 22 + TypeScript (`app/`) contiene el scheduler, el pipel
 ## Configuración por rubro
 
 `app/rubros/<nombre>.json` define keywords, exclusiones, materiales de ejemplo y los criterios de relevancia que se inyectan en los prompts. `RUBRO=<nombre>` selecciona uno. Cada análisis guarda el rubro con el que se hizo.
+
+## Módulo de mercado (histórico de ARCE)
+
+Desde el 14/10/2026 convive con el pipeline del rubro un segundo módulo, independiente, para estadísticas de mercado sobre **todo** el histórico de compras estatales (ver [CAMBIO-DE-ENFOQUE.md](CAMBIO-DE-ENFOQUE.md) y [MERCADO.md](MERCADO.md)).
+
+```
+scraper externo ──► POST /api/ingesta/llamados (token) ──► mercado.crudos (hash) ──► mercado.{organismos, proveedores, articulos, categorias, llamados, items, ofertas, adjudicaciones, cotizaciones}
+                                                                                                │
+                                      refresco con debounce tras cada lote · cron 03:30 · POST /api/mercado/refrescar
+                                                                                                ▼
+dashboard /mercado ◄── GET /api/mercado/* ◄── mv_hechos · mv_ofertas · mv_mes · mv_producto_mes · mv_proveedor_mes · mv_producto_ofertas_anio · mv_productos · mv_proveedores
+```
+
+- No scrapea: recibe. El contrato (zod → JSON Schema en `/api/ingesta/esquema`) acepta los formatos del portal y rechaza por llamado lo que rompería las estadísticas.
+- Todo en pesos sin impuestos y por unidad normalizada; excluye anulados/sin efecto; medianas en vez de promedios; cobertura visible en el dashboard.
+- Código en `app/src/mercado/` y `app/web/src/mercado/`; esquema en `app/migrations/004_mercado.sql`.

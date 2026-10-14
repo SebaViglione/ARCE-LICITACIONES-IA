@@ -18,7 +18,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && npm --prefix web run typecheck",
     "migrate": "tsx src/db/migrate.ts",
     "pipeline:once": "tsx src/pipeline/run.ts",
-    "test": "vitest run"
+    "mercado:demo": "tsx src/mercado/demo.ts",
+    "mercado:refrescar": "tsx src/mercado/refrescar.ts",
+    "test": "vitest run",
+    "test:db": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-$DATABASE_URL} vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

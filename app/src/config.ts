@@ -54,6 +54,15 @@ const EsquemaEnv = z.object({
 
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().optional(),
+
+  // Mercado (histórico de ARCE): ingesta por API y refresco de estadísticas
+  // Token que debe mandar el scraper (Authorization: Bearer ...). Vacío = ingesta deshabilitada.
+  INGESTA_TOKEN: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().min(16, 'INGESTA_TOKEN debe tener al menos 16 caracteres (openssl rand -hex 32)').optional()),
+  INGESTA_MAX_MB: z.coerce.number().int().positive().max(500).default(50),
+  MERCADO_REFRESCO_CRON: z.string().default('30 3 * * *'),
+  MERCADO_REFRESCO_ENABLED: booleano.default(true),
+  // Espera tras el último lote antes de refrescar las vistas (varios lotes seguidos → un solo refresco)
+  MERCADO_REFRESCO_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(60_000),
 });
 
 type Env = z.infer<typeof EsquemaEnv>;

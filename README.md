@@ -4,6 +4,8 @@ Monitor de licitaciones públicas de Uruguay (portal ARCE / Compras Estatales) p
 
 Cada 15 minutos el sistema lee el RSS de publicaciones, filtra los llamados que podrían ser del rubro (por defecto aluminio, aberturas y vidrio), scrapea el detalle, descarga y convierte a texto los pliegos (PDF, Word, Excel, ZIP, HTML, OCR) y le pide a la IA un análisis estructurado: ¿es relevante y con qué confianza?, ¿qué hay que hacer?, ¿dónde?, ¿hay visita técnica obligatoria, cuándo y con quién coordinar?, ¿qué formularios hay que presentar? Un humano revisa en el dashboard y ese feedback mide la precisión de la IA.
 
+Desde octubre de 2026 el proyecto tiene un segundo objetivo: **inteligencia de mercado sobre todo el histórico de ARCE**, de cualquier rubro: qué productos conviene vender, a qué precio se gana, quiénes son los competidores y quiénes compran. Un scraper externo (pendiente) manda los llamados históricos a una API de ingesta; el sistema los normaliza y las estadísticas salen solas en el tablero `/mercado`. El porqué del cambio está en [docs/CAMBIO-DE-ENFOQUE.md](docs/CAMBIO-DE-ENFOQUE.md) y la referencia técnica (contrato de ingesta, modelo, métricas) en [docs/MERCADO.md](docs/MERCADO.md).
+
 Arquitectura y flujo detallado: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Plan de modernización y bitácora: [docs/PLAN-MODERNIZACION.md](docs/PLAN-MODERNIZACION.md).
 
 ## Quick start
@@ -60,6 +62,10 @@ dashboard ◄── API Express ◄── analisis_ia ◄── LLM (Ollama / An
 | `OLLAMA_NUM_CTX` | `8192` | Contexto; de él se deriva cuántos caracteres de pliego entran sin fragmentar (~3 por token) |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | — | Solo con `LLM_PROVIDER=anthropic` |
 | `DATABASE_URL` | — | Solo para correr la app nativa |
+| `INGESTA_TOKEN` | — | Token que manda el scraper del histórico (`Authorization: Bearer`). Vacío = ingesta deshabilitada |
+| `INGESTA_MAX_MB` | `50` | Tamaño máximo de un lote de ingesta |
+| `MERCADO_REFRESCO_CRON` / `MERCADO_REFRESCO_ENABLED` | `30 3 * * *` / `true` | Refresco nocturno de las estadísticas de mercado (además del que dispara cada lote) |
+| `MERCADO_REFRESCO_DEBOUNCE_MS` | `60000` | Espera tras el último lote antes de recalcular |
 
 ## Cambiar de rubro
 
@@ -85,6 +91,11 @@ Los análisis guardan el rubro con el que se hicieron; `/api/llamados?rubro=<nue
 | `POST /api/pipeline/run` | Dispara una corrida (202; no espera). Body opcional `{ soloIngesta, soloAnalisis, limiteAnalisis }` |
 | `GET /api/pipeline/estado` | Corrida en curso y últimas 10 corridas |
 | `GET /api/rubros` | Rubro actual y disponibles |
+| `GET /api/ingesta/esquema` | JSON Schema del contrato de ingesta del histórico |
+| `POST /api/ingesta/llamados` · `/cotizaciones` · `/articulos` · `/proveedores` | Ingesta del histórico (token). Lotes de hasta 500 llamados con ítems, ofertas y adjudicaciones |
+| `POST /api/ingesta/reprocesar` · `DELETE /api/ingesta/fuente/:fuente` · `GET /api/ingesta/lotes` | Reproceso desde los crudos, borrado por fuente, historial de lotes |
+| `GET /api/mercado/resumen` · `/productos` · `/productos/:id` · `/proveedores` · `/proveedores/:id` · `/organismos` · `/categorias` · `/oportunidades` · `/buscar` | Estadísticas de mercado (ver [docs/MERCADO.md](docs/MERCADO.md)) |
+| `GET /api/mercado/estado` · `POST /api/mercado/refrescar` | Estado y refresco de las vistas materializadas |
 
 ## Desarrollo nativo
 
@@ -98,7 +109,10 @@ npm run pipeline:once -- --solo-analisis --limite=3
 npm run build:web                # compila el dashboard en app/public (lo sirve Express)
 npm run dev                      # API + dashboard + cron en http://localhost:3000
 npm run dev:web                  # (opcional) Vite con recarga en caliente en http://localhost:5173, proxy a :3000
-npm test                         # vitest: filtro, RSS, fechas, extracción, esquema IA
+npm test                         # vitest: filtro, RSS, fechas, extracción, esquema IA, normalización y contrato de mercado
+npm run test:db                  # además, la integración de mercado contra Postgres (crea una base temporal)
+npm run mercado:demo             # tres años de compras SINTÉTICAS por la API de ingesta, para ver /mercado con datos
+npm run mercado:demo -- --limpiar
 ```
 
 El dashboard es una bandeja de triage (lista por plazo a la izquierda, ficha y decisión a la derecha) hecha con Vite + React 19 + Tailwind 4, componentes de [shadcn/ui](https://ui.shadcn.com) y animaciones de [React Bits](https://reactbits.dev). Vive en `app/web/` y se compila dentro de `app/public/`, que no se versiona: lo genera `npm run build` y la imagen Docker.
@@ -115,12 +129,13 @@ app/
   src/llm/              schema (zod + JSON Schema), prompts, ollama, anthropic
   src/api/              server (Express) y routes
   src/db/               pool, migrate, repos (SQL parametrizado)
+  src/mercado/          histórico de ARCE: esquema (contrato zod), normalizar, ingesta, estadisticas, consultas, rutas, demo
   rubros/               configuración por rubro
-  migrations/           SQL versionado (schema_migrations)
-  web/                  dashboard React (Vite + shadcn/ui + React Bits); compila a public/
-  test/                 vitest + fixtures (RSS real, PDF/DOCX/ZIP, HTML de la IM)
+  migrations/           SQL versionado (schema_migrations); 004_mercado.sql = esquema mercado y vistas materializadas
+  web/                  dashboard React (Vite + shadcn/ui + React Bits); compila a public/. web/src/mercado = tablero de mercado
+  test/                 vitest + fixtures (RSS real, PDF/DOCX/ZIP, HTML de la IM) + integración de mercado
 docker-compose.yml      postgres + app (+ ollama con --profile ollama)
-docs/                   ARQUITECTURA.md, PLAN-MODERNIZACION.md
+docs/                   ARQUITECTURA.md, PLAN-MODERNIZACION.md, CAMBIO-DE-ENFOQUE.md, MERCADO.md
 ```
 
 ## Licencia

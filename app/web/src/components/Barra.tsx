@@ -5,6 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import CountUp from '@/components/CountUp';
 import ShinyText from '@/components/ShinyText';
+import { Nav } from '@/components/Nav';
 import type { Corrida, EstadoPipeline, Llamado, Metricas } from '@/lib/api';
 import { plural } from '@/lib/formato';
 
@@ -67,7 +68,8 @@ export function Barra({ rubro, llamados, metricas, pipeline, onBuscar }: Props) 
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="flex min-h-14 flex-wrap items-center gap-x-6 gap-y-2 px-5 py-2">
+      <div className="flex min-h-14 flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2">
+        <Nav actual="licitaciones" />
         <div className="flex items-baseline gap-2.5 whitespace-nowrap">
           <span className="text-[17px] font-semibold tracking-tight">Licitaciones ARCE</span>
           {rubro && <span className="text-sm text-muted-foreground">rubro {rubro}</span>}

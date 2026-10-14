@@ -8,17 +8,11 @@ import { rubrosDisponibles } from '../pipeline/filtro.js';
 import { estadoPipeline, runPipeline } from '../pipeline/run.js';
 import { logger } from '../logger.js';
 
-export const api = Router();
+import { ErrorHttp } from './errores.js';
 
-export class ErrorHttp extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public detalle?: unknown,
-  ) {
-    super(message);
-  }
-}
+export { ErrorHttp };
+
+export const api = Router();
 
 function validar<T>(schema: z.ZodType<T>, datos: unknown): T {
   const r = schema.safeParse(datos);
