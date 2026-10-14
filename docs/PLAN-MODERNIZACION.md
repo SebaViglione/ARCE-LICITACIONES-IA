@@ -16,7 +16,7 @@ Objetivo de la ejecución nocturna: terminar con `docker compose up --build` fun
 - Antes de empezar, copiar este plan a `docs/PLAN-MODERNIZACION.md` dentro del repo y mantenerlo actualizado marcando `[x]` lo hecho y anotando bloqueos en una sección `## Bitácora` al final.
 - No borrar `src/n8n/`, `src/processing/` ni `scripts/` hasta la Fase 8 (solo después de que la verificación de la Fase 7 pase). Si la Fase 7 falla, dejar el legacy y documentar en la bitácora.
 - Consultar la skill `claude-api` antes de tocar el proveedor Anthropic (Fase 5b); la doc de Ollama (`ollama` npm, structured outputs con `format: <json schema>`, `options.num_ctx`) vía Context7.
-- Puertos por defecto: app `3000`, postgres no publicado (o `5433` si hace falta debug). N8N desaparece, así que el 5678 ya no importa. El host tiene otros contenedores (`cps-n8n`, varios Supabase): no tocar nada fuera del proyecto `arce` de compose.
+- Puertos por defecto: app `3000`, postgres no publicado (o `5433` si hace falta debug). N8N desaparece, así que el 5678 ya no importa. El host tiene otros contenedores: no tocar nada fuera del proyecto `arce` de compose.
 - El pliego y las keywords están en español; mantener prompts en español.
 - No usar `set -e` + `$?`, ni SQL concatenado, ni `latest` en imágenes.
 
@@ -80,7 +80,7 @@ ARCE-LICITACIONES-IA/
 ### Fase 0. Preparación (10 min)
 - [x] `git checkout -b modernizacion`
 - [x] Copiar plan a `docs/PLAN-MODERNIZACION.md`
-- [ ] Modelo por defecto: `qwen3.5:9b` (Seba lo deja pulleando el 9/10). Hardware: sin GPU, 14 GB RAM, ~6 GB libres con los otros contenedores corriendo. Si `ollama list` no lo tiene, `ollama pull qwen3.5:9b`; fallback `llama3.2:3b` vía `OLLAMA_MODEL`. Qwen3.x trae modo "thinking": desactivarlo en la llamada (`think: false`) para que devuelva solo el JSON. Por ser CPU, medir tiempo por pliego y bajar `num_ctx` a 8192 si tarda más de ~3 min.
+- [ ] Modelo por defecto: `qwen3.5:9b` (quedó descargándose el 9/10). Hardware: sin GPU, 14 GB RAM, ~6 GB libres con los otros contenedores corriendo. Si `ollama list` no lo tiene, `ollama pull qwen3.5:9b`; fallback `llama3.2:3b` vía `OLLAMA_MODEL`. Qwen3.x trae modo "thinking": desactivarlo en la llamada (`think: false`) para que devuelva solo el JSON. Por ser CPU, medir tiempo por pliego y bajar `num_ctx` a 8192 si tarda más de ~3 min.
 - [x] Versionar `package-lock.json` (sacarlo de `.gitignore`).
 
 ### Fase 1. Esqueleto del servicio `app/`
@@ -185,8 +185,8 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 ## Bitácora
 
 ### 2026-10-09 · Fase 0
-- Entorno real: Node 22.22, Docker 29.6 + Compose 5.5, 16 CPU, 15 GB RAM (~7 GB disponibles con los contenedores `cps-*` y Supabase corriendo).
-- Ollama **no** está instalado nativo: corre como contenedor `cps-ollama` (ollama 0.40.2) publicado en `localhost:11434`. Solo tenía `llama3.2:3b`; se lanzó `POST /api/pull qwen3.5:9b` por la API (sin tocar el contenedor).
+- Entorno real: Node 22.22, Docker 29.6 + Compose 5.5, 16 CPU, 15 GB RAM (~7 GB disponibles con otros contenedores del host corriendo).
+- Ollama **no** está instalado nativo: corre como contenedor aparte (ollama 0.40.2) publicado en `localhost:11434`. Solo tenía `llama3.2:3b`; se lanzó `POST /api/pull qwen3.5:9b` por la API (sin tocar el contenedor).
 - En el host faltan `tesseract` y `chromium`; no importa para Docker (van en la imagen) y para el desarrollo nativo Puppeteer baja su propio Chrome. El OCR nativo simplemente falla de forma controlada.
 - Puertos 3000 y 5433 libres en el host.
 - Rama `modernizacion` creada desde `main`; `package-lock.json` sacado de `.gitignore`.
@@ -273,13 +273,13 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - `app/rubros/informatica.json` como segundo rubro: mismo formato, sin tocar código. Test `rubros.test.ts` verifica que todos los rubros del directorio cargan y que sus criterios llegan al prompt (63 tests en total).
 - Telegram y "preguntale al pliego" quedan fuera a propósito.
 
-### 2026-10-10 · Dashboard nuevo (pedido de Seba, fuera del plan original)
-- Primero una versión en HTML/JS vanilla con layout de bandeja; Seba la vio "muy AI slop" y pidió React con React Bits y Elephant UI.
+### 2026-10-10 · Dashboard nuevo (fuera del plan original)
+- Primero una versión en HTML/JS vanilla con layout de bandeja; se vio "muy AI slop" y pidió React con React Bits y Elephant UI.
 - Elephant UI (`@ttab/elephant-ui`) es un envoltorio de shadcn/ui publicado en GitHub Packages que exige token de GitHub para instalarse: inviable para `docker compose up --build`. Se usó shadcn/ui directo (estilo `base-nova`, Base UI) + React Bits (`CountUp`, `AnimatedContent`, `SpotlightCard`, `ShinyText`) instalados por el registro de shadcn.
 - `app/web/`: Vite 8 + React 19 + TypeScript + Tailwind 4. Compila a `app/public/` (ya no se versiona); el Dockerfile lo construye en la etapa de build. Tipografía Archivo variable (eje de ancho), tema único grafito + acento "canto de vidrio".
 - Layout: barra con estado del pipeline y KPIs animados (activos, del rubro según la IA, revisados, precisión), bandeja con búsqueda, filtros, orden, gráfico de aperturas de los próximos 30 días y lista agrupada por plazo; ficha con veredicto de la IA, titular, datos, qué piden, materiales, visita técnica, formularios, adjuntos, aclaraciones y la decisión humana fija al pie. Flechas del teclado para moverse; móvil con lista/ficha alternadas.
 
-### 2026-10-14 · Cambio de enfoque: de filtrar un rubro a leer todo el mercado (pedido del jefe de Seba)
+### 2026-10-14 · Cambio de enfoque: de filtrar un rubro a leer todo el mercado (pedido de la dirección de la empresa)
 - Nuevo objetivo: scrapear todo ARCE históricamente para saber qué producto vender, a qué precio, quién gana y quién compra; cualquier rubro. El scraping queda para un servicio aparte que todavía no existe; acá se armó **toda la estructura para que las estadísticas salgan solas apenas lleguen los datos**. Narrativa completa en `docs/portfolio/CAMBIO-DE-ENFOQUE.md` (pensado para portfolio y para que otro asistente lo retome); referencia técnica en `docs/MERCADO.md`.
 - `migrations/004_mercado.sql`: esquema `mercado` con trazabilidad (lotes, crudos con hash, refrescos), dimensiones (categorías jerárquicas, artículos por código o nombre normalizado, proveedores por RUT o nombre, organismos, cotizaciones), hechos (llamados, ítems, ofertas, adjudicaciones) y ocho vistas materializadas con índices únicos para `REFRESH CONCURRENTLY`. `mv_hechos` normaliza a UYU sin impuestos; `mv_productos` calcula HHI, líder e índice de oportunidad (35 % volumen, 20 % recurrencia, 20 % amplitud, 25 % apertura) sobre los últimos 24 meses de datos.
 - `src/mercado/`: contrato zod tolerante (números con coma, fechas dd/mm/aaaa, monedas y unidades del portal) y JSON Schema publicado; ingesta idempotente por hash con reemplazo transaccional de hijos, reproceso desde crudos y borrado por fuente; refresco con debounce (60 s), cola y cron nocturno; consultas con rango de meses; rutas `/api/ingesta/*` (token `INGESTA_TOKEN`, parser propio de 50 MB) y `/api/mercado/*`. `ErrorHttp` pasó a `api/errores.ts`.
@@ -287,8 +287,8 @@ Luego abrir `http://localhost:3000`, verificar tarjetas, guardar un feedback y v
 - Verificación sin scrapear: generador de datos sintéticos (`npm run mercado:demo`, fuente `demo-sintetico`, 1500 llamados en 8 lotes por la API real en ~15 s; refresco en 0,3 s) y test de integración que crea una base temporal (79 tests en total, `npm run test:db`). Capturas revisadas a 1440 px y 420 px sin errores de consola.
 - Pendiente fuera del repo: el scraper del histórico, cotizaciones del BCU, catálogo oficial de artículos. Dentro del repo: clasificar ítems sin código (posible IA), calibrar el índice con datos reales, medir escala con millones de filas.
 
-### 2026-10-14 · El analista: la IA sobre las estadísticas de mercado (pedido de Seba: "quién analiza los datos")
-- Las estadísticas solas no analizaban; faltaba la pieza que Seba y su jefe esperaban. `src/mercado/analista.ts` usa el proveedor LLM existente (`generarJson` con JSON Schema, Ollama o Anthropic) para tres cosas: informe del mercado (resumen ejecutivo, hasta 8 productos a atacar con precio de entrada, competidores y riesgos; tendencias, competencia, compradores, alertas de datos, preguntas abiertas), veredicto por producto (entrar / explorar / evitar, confianza, rango de precio apoyado en percentiles y cuadros comparativos, a quién venderle, cómo ganar) y preguntas libres (búsqueda de productos/proveedores mencionados → fichas → respuesta con datos usados y limitaciones).
+### 2026-10-14 · El analista: la IA sobre las estadísticas de mercado (pedido: "quién analiza los datos")
+- Las estadísticas solas no analizaban; faltaba la pieza que la empresa esperaba. `src/mercado/analista.ts` usa el proveedor LLM existente (`generarJson` con JSON Schema, Ollama o Anthropic) para tres cosas: informe del mercado (resumen ejecutivo, hasta 8 productos a atacar con precio de entrada, competidores y riesgos; tendencias, competencia, compradores, alertas de datos, preguntas abiertas), veredicto por producto (entrar / explorar / evitar, confianza, rango de precio apoyado en percentiles y cuadros comparativos, a quién venderle, cómo ganar) y preguntas libres (búsqueda de productos/proveedores mencionados → fichas → respuesta con datos usados y limitaciones).
 - Anclaje: el modelo solo ve un paquete de texto recortado al presupuesto de contexto (60 k chars con Anthropic, ~10 k con el 4b local); el prompt exige citar cifras y no inventar; los ids que cita se verifican contra el paquete; cada respuesta se guarda con el paquete en `mercado.informes` (migración 005). Los análisis largos corren como trabajos con estado (`POST` → 202, `GET` con `en_curso`), porque con el modelo local tardan minutos.
 - Dashboard: tarjeta "Lo que dice la IA del mercado" y "Preguntale al mercado" en el panorama; "¿Conviene entrar? Veredicto de la IA" en la ficha de producto. Tests: unitarios del formato y la validación, e integración con proveedor simulado (83 tests).
 - Para la demo del portfolio se generaron los tres análisis con `qwen3.5:4b` sobre los datos sintéticos; las capturas están en `docs/portfolio/capturas/` y el documento en `docs/portfolio/CAMBIO-DE-ENFOQUE.md`.
