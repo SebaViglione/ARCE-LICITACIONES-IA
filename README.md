@@ -4,7 +4,7 @@ Monitor de licitaciones públicas de Uruguay (portal ARCE / Compras Estatales) p
 
 Cada 15 minutos el sistema lee el RSS de publicaciones, filtra los llamados que podrían ser del rubro (por defecto aluminio, aberturas y vidrio), scrapea el detalle, descarga y convierte a texto los pliegos (PDF, Word, Excel, ZIP, HTML, OCR) y le pide a la IA un análisis estructurado: ¿es relevante y con qué confianza?, ¿qué hay que hacer?, ¿dónde?, ¿hay visita técnica obligatoria, cuándo y con quién coordinar?, ¿qué formularios hay que presentar? Un humano revisa en el dashboard y ese feedback mide la precisión de la IA.
 
-Desde octubre de 2026 el proyecto tiene un segundo objetivo: **inteligencia de mercado sobre todo el histórico de ARCE**, de cualquier rubro: qué productos conviene vender, a qué precio se gana, quiénes son los competidores y quiénes compran. Un scraper externo (pendiente) manda los llamados históricos a una API de ingesta; el sistema los normaliza y las estadísticas salen solas en el tablero `/mercado`. El porqué del cambio está en [docs/CAMBIO-DE-ENFOQUE.md](docs/CAMBIO-DE-ENFOQUE.md) y la referencia técnica (contrato de ingesta, modelo, métricas) en [docs/MERCADO.md](docs/MERCADO.md).
+Desde octubre de 2026 el proyecto tiene un segundo objetivo: **inteligencia de mercado sobre todo el histórico de ARCE**, de cualquier rubro: qué productos conviene vender, a qué precio se gana, quiénes son los competidores y quiénes compran. Un scraper externo (pendiente) manda los llamados históricos a una API de ingesta; el sistema los normaliza, las estadísticas salen solas en el tablero `/mercado` y la IA (el mismo proveedor del pipeline: Ollama local o la API de Anthropic) las lee y escribe el informe: qué atacar, a qué precio, contra quién, y responde preguntas libres citando los datos. El porqué del cambio está en [docs/portfolio/CAMBIO-DE-ENFOQUE.md](docs/portfolio/CAMBIO-DE-ENFOQUE.md) y la referencia técnica (contrato de ingesta, modelo, métricas) en [docs/MERCADO.md](docs/MERCADO.md).
 
 Arquitectura y flujo detallado: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Plan de modernización y bitácora: [docs/PLAN-MODERNIZACION.md](docs/PLAN-MODERNIZACION.md).
 
@@ -96,6 +96,7 @@ Los análisis guardan el rubro con el que se hicieron; `/api/llamados?rubro=<nue
 | `POST /api/ingesta/reprocesar` · `DELETE /api/ingesta/fuente/:fuente` · `GET /api/ingesta/lotes` | Reproceso desde los crudos, borrado por fuente, historial de lotes |
 | `GET /api/mercado/resumen` · `/productos` · `/productos/:id` · `/proveedores` · `/proveedores/:id` · `/organismos` · `/categorias` · `/oportunidades` · `/buscar` | Estadísticas de mercado (ver [docs/MERCADO.md](docs/MERCADO.md)) |
 | `GET /api/mercado/estado` · `POST /api/mercado/refrescar` | Estado y refresco de las vistas materializadas |
+| `POST`/`GET /api/mercado/analisis` · `POST`/`GET /api/mercado/productos/:id/analisis` · `POST /api/mercado/preguntar` · `GET /api/mercado/preguntas` | El analista: informe del mercado, veredicto por producto y preguntas libres escritos por la IA a partir de las estadísticas (Ollama o Anthropic, según `LLM_PROVIDER`) |
 
 ## Desarrollo nativo
 
@@ -135,7 +136,7 @@ app/
   web/                  dashboard React (Vite + shadcn/ui + React Bits); compila a public/. web/src/mercado = tablero de mercado
   test/                 vitest + fixtures (RSS real, PDF/DOCX/ZIP, HTML de la IM) + integración de mercado
 docker-compose.yml      postgres + app (+ ollama con --profile ollama)
-docs/                   ARQUITECTURA.md, PLAN-MODERNIZACION.md, CAMBIO-DE-ENFOQUE.md, MERCADO.md
+docs/                   ARQUITECTURA.md, PLAN-MODERNIZACION.md, MERCADO.md; portfolio/ (CAMBIO-DE-ENFOQUE.md + capturas del tablero)
 ```
 
 ## Licencia

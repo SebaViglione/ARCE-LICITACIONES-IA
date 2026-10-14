@@ -4,11 +4,12 @@ import type { Rango, ResumenMercado } from '@/lib/mercadoApi';
 import { haceCuanto, plural } from '@/lib/formato';
 import { entero, ESTADOS_LLAMADO, mesLargo, montoUyu, porcentaje, TIPOS_COMPRA } from '@/lib/numeros';
 import { AdjudicacionesMensuales, BarrasHorizontales, MontoMensual } from '@/mercado/Graficos';
+import { AnalisisMercado, PreguntarMercado } from '@/mercado/AnalisisIA';
 import { Pastilla, Seccion } from '@/mercado/comunes';
 
-// Vista por defecto del panel derecho: el mercado entero en el período, más la salud de los datos.
+// Vista por defecto del panel derecho: el informe de la IA, el mercado entero en el período y la salud de los datos.
 
-export function Panorama({ resumen, rango }: { resumen: ResumenMercado | null; rango: Rango }) {
+export function Panorama({ resumen, rango, categoria, version }: { resumen: ResumenMercado | null; rango: Rango; categoria: number | null; version: number }) {
   const serie = useMemo(
     () => (resumen ? resumen.por_mes.filter((m) => (!rango.desde || m.mes.slice(0, 7) >= rango.desde) && (!rango.hasta || m.mes.slice(0, 7) <= rango.hasta)) : []),
     [resumen, rango],
@@ -29,7 +30,10 @@ export function Panorama({ resumen, rango }: { resumen: ResumenMercado | null; r
     <div className="mx-auto flex min-h-full w-full max-w-[880px] flex-col px-5 pt-5 pb-10 md:px-8 md:pt-6">
       <p className="text-[13px] text-muted-foreground">Panorama</p>
       <h1 className="mt-0.5 text-[25px] leading-[1.22] font-semibold tracking-tight">Todo el mercado, {periodo}</h1>
-      <p className="mt-1 max-w-[70ch] text-[13.5px] text-muted-foreground">Elegí un producto, un competidor o un comprador a la izquierda para ver su detalle. Acá se ve el conjunto: cuánto se adjudica por mes, cómo se compra y qué tan completos son los datos.</p>
+      <p className="mt-1 max-w-[70ch] text-[13.5px] text-muted-foreground">Elegí un producto, un competidor o un comprador a la izquierda para ver su detalle. Acá se ve el conjunto: lo que concluye la IA, cuánto se adjudica por mes, cómo se compra y qué tan completos son los datos.</p>
+
+      <AnalisisMercado rango={rango} categoria={categoria} version={version} />
+      <PreguntarMercado />
 
       <Seccion titulo="Monto adjudicado por mes" nota="pesos sin impuestos">
         <MontoMensual datos={serie} alto={170} />

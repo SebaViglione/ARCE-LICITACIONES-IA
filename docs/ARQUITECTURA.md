@@ -68,7 +68,7 @@ Un único servicio Node 22 + TypeScript (`app/`) contiene el scheduler, el pipel
 
 ## Módulo de mercado (histórico de ARCE)
 
-Desde el 14/10/2026 convive con el pipeline del rubro un segundo módulo, independiente, para estadísticas de mercado sobre **todo** el histórico de compras estatales (ver [CAMBIO-DE-ENFOQUE.md](CAMBIO-DE-ENFOQUE.md) y [MERCADO.md](MERCADO.md)).
+Desde el 14/10/2026 convive con el pipeline del rubro un segundo módulo, independiente, para estadísticas de mercado sobre **todo** el histórico de compras estatales (ver [portfolio/CAMBIO-DE-ENFOQUE.md](portfolio/CAMBIO-DE-ENFOQUE.md) y [MERCADO.md](MERCADO.md)).
 
 ```
 scraper externo ──► POST /api/ingesta/llamados (token) ──► mercado.crudos (hash) ──► mercado.{organismos, proveedores, articulos, categorias, llamados, items, ofertas, adjudicaciones, cotizaciones}

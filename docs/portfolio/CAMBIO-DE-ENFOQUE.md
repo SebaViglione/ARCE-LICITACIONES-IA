@@ -1,6 +1,6 @@
 # De filtrar licitaciones de aluminio a leer todo el mercado de compras estatales
 
-> Documento de contexto para quien retome el proyecto (humano o asistente de IA). Cuenta de dónde venía el sistema, por qué cambió de objetivo el 14 de octubre de 2026, qué se construyó para el nuevo objetivo y qué falta. Para la referencia técnica del módulo nuevo ver [MERCADO.md](MERCADO.md); para la arquitectura general, [ARQUITECTURA.md](ARQUITECTURA.md).
+> Documento de contexto para quien retome el proyecto (humano o asistente de IA). Cuenta de dónde venía el sistema, por qué cambió de objetivo el 14 de octubre de 2026, qué se construyó para el nuevo objetivo y qué falta. Para la referencia técnica del módulo nuevo ver [MERCADO.md](../MERCADO.md); para la arquitectura general, [ARQUITECTURA.md](../ARQUITECTURA.md).
 
 ## 1. El problema original
 
@@ -19,7 +19,7 @@ Eso cambia la naturaleza del sistema:
 | Objeto | Llamados abiertos de un rubro | Todas las adjudicaciones históricas, todos los rubros |
 | Pregunta | ¿Es para nosotros? | ¿Qué se vende, a qué precio, quién gana, quién compra? |
 | Dato clave | El pliego (texto) | La adjudicación (producto, cantidad, precio, proveedor, organismo, fecha) |
-| Rol de la IA | Leer pliegos | Ninguno por ahora (son datos estructurados); posible más adelante para clasificar ítems sin código |
+| Rol de la IA | Leer pliegos y decidir si son del rubro | Leer las estadísticas y escribir el análisis: qué atacar, a qué precio, contra quién; responder preguntas libres con los datos |
 | Fuente | RSS + scraping propio | Un scraper externo que todavía no existe, mandando lotes por API |
 | Salida | Bandeja de triage | Estadísticas de mercado: rankings, precios, cuotas, competencia |
 
@@ -66,7 +66,17 @@ scraper externo ──POST /api/ingesta/llamados──►  crudos (JSON + hash) 
 
 Una segunda sección del dashboard React, con el mismo lenguaje visual que la bandeja de triage: filtros de período (presets de 12/24/60 meses relativos al último dato, o un rango de meses), categoría y búsqueda; indicadores del período; a la izquierda cuatro pestañas (Qué vender, Productos, Competidores, Compradores); a la derecha el panorama del mercado o la ficha del producto o proveedor elegido, con gráficos de una sola serie (precio mediano mensual, monto mensual, cuotas con etiquetas directas). Mientras no haya datos, la pantalla explica cómo alimentar el sistema y muestra si algún lote fue rechazado.
 
-### 3.5 Cómo se probó sin scrapear
+### 3.5 Dónde entra la IA: el analista
+
+Las estadísticas dicen *qué pasó*; alguien tiene que decir *qué hacer*. Ese es el trabajo del analista (`app/src/mercado/analista.ts`): un modelo de lenguaje (el mismo proveedor que usa el resto del sistema: Ollama local o la API de Anthropic, según `LLM_PROVIDER`) recibe un paquete de texto con las cifras ya calculadas y responde con JSON validado contra un esquema. Tres usos:
+
+- **Informe del mercado** para la dirección: resumen ejecutivo, hasta ocho productos a atacar en orden con el porqué en cifras, precio de entrada, competidores a vigilar y riesgos; tendencias, competencia, compradores clave, alertas sobre los datos y preguntas abiertas.
+- **Veredicto por producto**: entrar, explorar o evitar, con confianza, rango de precio de entrada apoyado en los percentiles y en los cuadros comparativos, a quién venderle primero, competidores que importan, cómo ganar, riesgos y datos que faltan.
+- **Preguntas libres** ("¿quién gana las compras de gasoil y a qué precio conviene ofertar?"): se buscan los productos y proveedores mencionados, se arman sus fichas y el modelo responde citando los datos y diciendo qué no puede responder.
+
+Las reglas que lo mantienen honesto: el modelo nunca consulta la base, solo ve el paquete; el prompt le prohíbe inventar cifras o nombres y le exige citar números; los ids de producto que menciona se verifican contra el paquete y se descartan si no existen; cada respuesta se guarda junto con el paquete exacto que la originó (`mercado.informes`), así cualquier conclusión se puede auditar; y el paquete se recorta al presupuesto de contexto del modelo (amplio con Anthropic, acotado con un modelo local de 8k tokens). Con un modelo local en CPU un informe tarda entre uno y tres minutos, por eso los análisis se piden y se consultan por estado; con la API de Anthropic son segundos.
+
+### 3.6 Cómo se probó sin scrapear
 
 Un generador de **datos sintéticos** (`npm run mercado:demo`) produce tres años de compras verosímiles (35 productos de 9 familias, 42 proveedores, 28 organismos, precios con inflación, dólar y UI con cotización semanal, cuadros comparativos en el 45 % de los ítems) y los manda por la misma API que usará el scraper, con la fuente `demo-sintetico` para poder borrarlos de un comando. Sirve de prueba de punta a punta, de ejemplo de cliente del contrato y de demo del tablero. Un test de integración crea una base temporal, migra, ingesta, refresca y verifica las conversiones (impuestos, cotización, HHI, precio ganador vs. perdedor).
 
@@ -77,27 +87,39 @@ Un generador de **datos sintéticos** (`npm run mercado:demo`) produce tres año
 - **Vistas materializadas, no consultas en vivo.** Con millones de adjudicaciones, los rankings tienen que precalcularse. Las vistas se refrescan `CONCURRENTLY` para no bloquear el dashboard; para la carga inicial masiva hay un modo bloqueante más rápido.
 - **El índice de oportunidad es una fórmula visible, no un modelo.** Los pesos están en el SQL y en la documentación; cambiarlos es editar una línea. Primero hay que ver datos reales antes de sofisticarlo.
 - **Un token para la ingesta.** `INGESTA_TOKEN` en el entorno; sin él, la ingesta responde 503 y el resto del sistema funciona igual. Nada de credenciales en el código.
-- **La IA queda en pausa en este módulo.** Los datos de adjudicación son estructurados; el valor hoy está en normalizarlos bien. Queda abierto usar un modelo para mapear ítems de texto libre al catálogo (ver pendientes).
+- **La IA analiza, no calcula.** Los números salen de SQL (reproducibles, auditables); el modelo los lee y los interpreta. Si el modelo se equivoca, el paquete guardado muestra qué vio. La otra tarea posible para un modelo, mapear ítems de texto libre al catálogo, queda como pendiente.
 
 ## 5. Qué falta (y por dónde seguir)
 
-1. **El scraper del histórico.** Es el trabajo grande pendiente y vive fuera de este repositorio. Tiene que recorrer el portal (o sus datos abiertos) y mandar lotes a `POST /api/ingesta/llamados` siguiendo el contrato de `GET /api/ingesta/esquema`. En [MERCADO.md](MERCADO.md) hay una guía de qué extraer de cada página de ARCE y cómo mapearlo.
+1. **El scraper del histórico.** Es el trabajo grande pendiente y vive fuera de este repositorio. Tiene que recorrer el portal (o sus datos abiertos) y mandar lotes a `POST /api/ingesta/llamados` siguiendo el contrato de `GET /api/ingesta/esquema`. En [MERCADO.md](../MERCADO.md) hay una guía de qué extraer de cada página de ARCE y cómo mapearlo.
 2. **Cotizaciones reales** de USD, UI y UR (BCU) a `POST /api/ingesta/cotizaciones`, una por día, para convertir bien el histórico.
 3. **El catálogo de artículos de ARCE** (código, nombre, familia) a `POST /api/ingesta/articulos`, para que la jerarquía de categorías sea la oficial.
 4. **Ítems sin código de catálogo.** Si una parte del histórico viene solo con descripción libre, conviene un paso de clasificación (reglas o IA con salida estructurada) que los asigne a un artículo; el esquema ya lo permite (`items.articulo_id` nulo).
 5. **Calibrar el índice de oportunidad** con datos reales y con el criterio comercial de la empresa (por ejemplo, ponderar más los organismos a los que ya se les vende).
 6. **Escala.** Con el histórico completo (varios millones de filas) hay que medir el refresco y, si hace falta, particionar `mv_hechos` por año o mover los rankings de rango arbitrario a agregados anuales.
 
-## 6. Cómo verlo funcionando en cinco minutos
+## 6. Capturas (datos sintéticos de demostración)
+
+Las imágenes de esta carpeta salen del generador de datos sintéticos: los productos, proveedores, organismos y precios son inventados para la demo, no compras reales.
+
+![Qué vender: ranking por índice de oportunidad y panorama del mercado](capturas/mercado-oportunidades.png)
+
+![Informe del mercado escrito por la IA a partir de las estadísticas](capturas/mercado-informe-ia.png)
+
+![Ficha de producto con el veredicto de la IA, distribución de precios y tendencia](capturas/mercado-producto-ia.png)
+
+![Ficha de un competidor: qué vende, a quién y contra quién compite](capturas/mercado-proveedor.png)
+
+## 7. Cómo verlo funcionando en cinco minutos
 
 ```bash
 cp .env.example .env                       # poner POSTGRES_PASSWORD y un INGESTA_TOKEN (openssl rand -hex 32)
 docker compose up --build -d               # postgres + app; aplica las migraciones
 cd app && npm install && npm run mercado:demo   # tres años de datos sintéticos por la API de ingesta
-xdg-open http://localhost:3000/mercado     # un minuto después (o botón "Recalcular estadísticas")
+xdg-open http://localhost:3000/mercado     # un minuto después (o botón "Recalcular estadísticas"); "Pedir el informe" llama a la IA
 ```
 
-## 7. Mapa del código del módulo
+## 8. Mapa del código del módulo
 
 ```
 app/migrations/004_mercado.sql     esquema mercado: tablas, función de cotización, 8 vistas materializadas
@@ -106,8 +128,9 @@ app/src/mercado/normalizar.ts      RUT, nombres, monedas, unidades, estados, tip
 app/src/mercado/ingesta.ts         crudos + upserts transaccionales, reproceso, borrado por fuente
 app/src/mercado/estadisticas.ts    refresco de vistas (debounce, cola, historial)
 app/src/mercado/consultas.ts       SQL de resumen, productos, proveedores, organismos, categorías, oportunidades, búsqueda
-app/src/mercado/rutas.ts           Express: /api/ingesta/* (token) y /api/mercado/*
+app/src/mercado/rutas.ts           Express: /api/ingesta/* (token), /api/mercado/* y los endpoints del analista
+app/src/mercado/analista.ts        la IA: paquetes de datos, prompts, esquemas de respuesta, validación, persistencia, trabajos en curso
 app/src/mercado/demo.ts            generador de datos sintéticos / cliente de ejemplo
 app/test/mercado_*.test.ts         unitarios (normalización, contrato) e integración (base temporal real)
-app/web/src/mercado/               Mercado, BarraMercado, Listas, FichaProducto, FichaProveedor, Panorama, VacioMercado, Graficos
+app/web/src/mercado/               Mercado, BarraMercado, Listas, FichaProducto, FichaProveedor, Panorama, VacioMercado, Graficos, AnalisisIA
 ```

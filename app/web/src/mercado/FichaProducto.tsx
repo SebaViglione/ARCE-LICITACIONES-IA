@@ -8,6 +8,7 @@ import { mercadoApi, type FichaProducto as Ficha, type Rango } from '@/lib/merca
 import { fechaCorta } from '@/lib/formato';
 import { entero, mesLargo, montoUyu, porcentaje, precioUyu, TIPOS_COMPRA, unidadLegible } from '@/lib/numeros';
 import { BarrasHorizontales, MontoMensual, PrecioMensual, RangoPrecios, Vacio } from '@/mercado/Graficos';
+import { AnalisisProductoIa } from '@/mercado/AnalisisIA';
 import { Barrita, Indicador, Pastilla, Seccion, Tendencia } from '@/mercado/comunes';
 
 interface Props {
@@ -94,6 +95,8 @@ export function FichaProducto({ id, rango, version, onVolver, onProveedor }: Pro
           </div>
         </div>
       )}
+
+      <AnalisisProductoIa id={id} rango={rango} version={version} />
 
       <dl className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-x-5 gap-y-3 border-y border-border py-3.5">
         <Indicador texto={montoUyu(r.monto_uyu)} etiqueta={`adjudicado, ${periodo}`} />

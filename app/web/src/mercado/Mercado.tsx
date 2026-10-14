@@ -109,7 +109,7 @@ export function Mercado({ ruta }: { ruta: Ruta }) {
             ) : seleccion?.tipo === 'proveedores' ? (
               <FichaProveedor key={seleccion.id} id={seleccion.id} rango={rango} version={version} onVolver={volver} onProducto={abrirProducto} onProveedor={abrirProveedor} />
             ) : (
-              <Panorama resumen={resumen} rango={rango} />
+              <Panorama resumen={resumen} rango={rango} categoria={categoria} version={version} />
             )}
           </div>
         </div>

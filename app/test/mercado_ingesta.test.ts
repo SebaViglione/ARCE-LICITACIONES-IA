@@ -6,6 +6,34 @@ import { refrescarEstadisticas } from '../src/mercado/estadisticas.js';
 import * as consultas from '../src/mercado/consultas.js';
 import { LoteLlamadosIngesta } from '../src/mercado/esquema.js';
 import { generarDemo } from '../src/mercado/demo.js';
+import { claveMercado, generarAnalisisProducto, generarInformeMercado, responderPregunta, ultimoInforme, ultimasPreguntas, type InformeMercado } from '../src/mercado/analista.js';
+import type { PedidoJson, ProveedorLlm, RespuestaJson } from '../src/llm/index.js';
+
+// Proveedor simulado: responde según el esquema que le piden y guarda el último prompt recibido.
+function proveedorSimulado(): ProveedorLlm & { prompts: string[] } {
+  const prompts: string[] = [];
+  return {
+    nombre: 'simulado',
+    modelo: 'simulado-1',
+    prompts,
+    preparar: async () => undefined,
+    salud: async () => ({ ok: true, proveedor: 'simulado', modelo: 'simulado-1', cargado: true }),
+    async generarJson<T>(pedido: PedidoJson<T>): Promise<RespuestaJson<T>> {
+      prompts.push(pedido.prompt);
+      const props = (pedido.jsonSchema as { properties: Record<string, unknown> }).properties;
+      let raw: unknown;
+      if ('resumen_ejecutivo' in props) {
+        const idMatch = /\[id (\d+)\] ([^(]+) \(/.exec(pedido.prompt);
+        raw = { resumen_ejecutivo: 'Resumen de prueba.', oportunidades: [{ producto: idMatch?.[2]?.trim() ?? 'X', articulo_id: idMatch ? Number(idMatch[1]) : null, prioridad: 'alta', por_que: 'porque sí', precio_de_entrada: '$ 4.600 a $ 4.900 por unidad', competidores_a_vigilar: ['Infotec'], riesgos: null }, { producto: 'Inventado', articulo_id: 999999, prioridad: 'baja', por_que: 'no existe', precio_de_entrada: null, competidores_a_vigilar: [], riesgos: null }], tendencias: ['t'], competencia: ['c'], compradores_clave: ['o'], alertas_de_datos: ['datos sintéticos'], preguntas_abiertas: [] };
+      } else if ('veredicto' in props) {
+        raw = { veredicto: 'explorar', confianza: 70, resumen: 'r', precio_recomendado: { desde: 1, hasta: 2, unidad: '', justificacion: 'j' }, a_quien_venderle: ['a'], competidores: [], como_ganar: ['g'], riesgos: [], datos_faltantes: [] };
+      } else {
+        raw = { respuesta: 'Respuesta de prueba.', datos_usados: ['d'], limitaciones: [], sugerencias: [] };
+      }
+      return { datos: pedido.validar(raw), meta: { proveedor: 'simulado', modelo: 'simulado-1', prompt_tokens: 10, completion_tokens: 5, duracion_ms: 1, intentos: 1 } };
+    },
+  };
+}
 
 // Prueba de integración contra un Postgres real: crea una base temporal, migra, ingesta, refresca y consulta.
 // Corre solo si TEST_DATABASE_URL apunta a un servidor (npm run test:db con la BD del compose levantada).
@@ -228,6 +256,32 @@ describeDb('ingesta de mercado (integración)', () => {
     expect(op[0].comp_apertura).toBeGreaterThanOrEqual(0);
     expect(op[0].comp_apertura).toBeLessThanOrEqual(1);
     for (const o of op) expect(o.hhi_24m).toBeGreaterThan(0);
+
+    // Analista con proveedor simulado: el paquete lleva las cifras, la respuesta se valida y se guarda con el paquete
+    const prov = proveedorSimulado();
+    const filtros = { categoria: null, desde: null, hasta: null };
+    const informe = await generarInformeMercado(filtros, { pool, proveedor: prov });
+    expect(informe.informe.oportunidades[0]!.articulo_id).toBe(op[0].articulo_id);
+    expect(informe.informe.oportunidades[1]!.articulo_id).toBeNull(); // id inventado por el modelo → descartado
+    expect(prov.prompts[0]).toContain('OPORTUNIDADES');
+    expect(prov.prompts[0]).toContain('SINTÉTICOS');
+    expect(prov.prompts[0]).toContain(`[id ${op[0].articulo_id}] ${op[0].nombre}`);
+    const guardado = await ultimoInforme<InformeMercado>('mercado', claveMercado(filtros), pool, true);
+    expect(guardado?.id).toBe(informe.id);
+    expect(guardado?.modelo).toBe('simulado-1');
+    expect(guardado?.paquete).toContain('PROVEEDORES POR MONTO');
+
+    const analisis = await generarAnalisisProducto(op[0].articulo_id, { desde: null, hasta: null }, { pool, proveedor: prov });
+    expect(analisis?.informe.veredicto).toBe('explorar');
+    expect(analisis?.informe.precio_recomendado.unidad).toBe(op[0].unidad); // unidad vacía → la del producto
+    expect(prov.prompts[1]).toContain('QUIÉN GANA');
+    expect(await generarAnalisisProducto(999999, { desde: null, hasta: null }, { pool, proveedor: prov })).toBeNull();
+
+    const nombre = String(op[0].nombre).split(' ')[0]!.toLowerCase();
+    const respuesta = await responderPregunta(`¿Quién gana las compras de ${nombre} y a qué precio?`, { pool, proveedor: prov });
+    expect(respuesta.informe.respuesta).toBe('Respuesta de prueba.');
+    expect(prov.prompts[2]).toContain('FICHA DE PRODUCTO RELACIONADO');
+    expect((await ultimasPreguntas(5, pool))[0]?.pregunta).toContain(nombre);
 
     const borrado = await borrarFuente('demo-sintetico', { pool, refrescar: false });
     expect(borrado.llamados).toBe(400);

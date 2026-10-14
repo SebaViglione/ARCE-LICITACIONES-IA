@@ -8,6 +8,7 @@ import { esquemasJson, LoteArticulosIngesta, LoteCotizacionesIngesta, LoteLlamad
 import { refrescoEnCurso, refrescarEstadisticas, ultimoRefresco, ultimosRefrescos } from './estadisticas.js';
 import { borrarFuente, ingestarArticulos, ingestarCotizaciones, ingestarLlamados, ingestarProveedores, reprocesarCrudos, ultimosLotes } from './ingesta.js';
 import { logger } from '../logger.js';
+import { claveMercado, claveProducto, clavePregunta, estadoTrabajo, generarAnalisisProducto, generarInformeMercado, iniciarTrabajo, responderPreguntaUnaVez, ultimasPreguntas, ultimoInforme, type AnalisisProducto, type FiltrosMercado, type InformeMercado, type RespuestaPregunta } from './analista.js';
 
 function validar<T>(schema: z.ZodType<T>, datos: unknown): T {
   const r = schema.safeParse(datos);
@@ -181,4 +182,65 @@ mercado.get('/oportunidades', async (req: Request, res: Response) => {
 mercado.get('/buscar', async (req: Request, res: Response) => {
   const q = validar(z.string().trim().min(2).max(200), req.query.q);
   res.json(await consultas.buscar(q));
+});
+
+// ---------------------------------------------------------------------------
+// Analista (IA sobre las estadísticas): informe del mercado, veredicto por producto, preguntas
+// ---------------------------------------------------------------------------
+
+const FiltrosAnalisisQuery = RangoQuery.extend({ categoria: z.coerce.number().int().positive().optional() });
+
+function filtrosDe(q: z.infer<typeof FiltrosAnalisisQuery>): FiltrosMercado {
+  return { ...rangoDe(q), categoria: q.categoria ?? null };
+}
+
+mercado.get('/analisis', async (req: Request, res: Response) => {
+  const f = filtrosDe(validar(FiltrosAnalisisQuery, req.query));
+  const clave = claveMercado(f);
+  res.json({ ...estadoTrabajo(`mercado:${clave}`), informe: await ultimoInforme<InformeMercado>('mercado', clave) });
+});
+
+mercado.post('/analisis', async (req: Request, res: Response) => {
+  const f = filtrosDe(validar(FiltrosAnalisisQuery, req.body ?? {}));
+  const iniciado = iniciarTrabajo(`mercado:${claveMercado(f)}`, () => generarInformeMercado(f));
+  res.status(202).json({ iniciado, ...estadoTrabajo(`mercado:${claveMercado(f)}`) });
+});
+
+mercado.get('/productos/:id/analisis', async (req: Request, res: Response) => {
+  const id = validar(z.coerce.number().int().positive(), req.params.id);
+  const rango = rangoDe(validar(RangoQuery, req.query));
+  const clave = claveProducto(id, rango);
+  res.json({ ...estadoTrabajo(`producto:${clave}`), informe: await ultimoInforme<AnalisisProducto>('producto', clave) });
+});
+
+mercado.post('/productos/:id/analisis', async (req: Request, res: Response) => {
+  const id = validar(z.coerce.number().int().positive(), req.params.id);
+  const rango = rangoDe(validar(RangoQuery, req.body ?? {}));
+  const clave = `producto:${claveProducto(id, rango)}`;
+  const iniciado = iniciarTrabajo(clave, async () => {
+    const r = await generarAnalisisProducto(id, rango);
+    if (!r) throw new ErrorHttp(404, 'Producto no encontrado');
+  });
+  res.status(202).json({ iniciado, ...estadoTrabajo(clave) });
+});
+
+// Pregunta libre: responde en la misma llamada (segundos con Anthropic, alrededor de un minuto con un modelo local).
+// La misma pregunta en las últimas 6 horas se devuelve de la base; repetida mientras se responde, comparte la llamada.
+mercado.post('/preguntar', async (req: Request, res: Response) => {
+  const { pregunta } = validar(z.object({ pregunta: z.string().trim().min(5).max(500) }), req.body ?? {});
+  const reciente = await ultimoInforme<RespuestaPregunta>('pregunta', clavePregunta(pregunta));
+  if (reciente && Date.now() - new Date(reciente.creado_en).getTime() < 6 * 3600_000) {
+    res.json({ ...reciente, en_cache: true });
+    return;
+  }
+  try {
+    res.json(await responderPreguntaUnaVez(pregunta));
+  } catch (err) {
+    throw new ErrorHttp(502, `La IA no pudo responder: ${(err as Error).message}`);
+  }
+});
+
+mercado.get('/preguntas', async (req: Request, res: Response) => {
+  const n = validar(z.coerce.number().int().min(1).max(50).default(10), req.query.limit);
+  res.json(await ultimasPreguntas(n));
 });

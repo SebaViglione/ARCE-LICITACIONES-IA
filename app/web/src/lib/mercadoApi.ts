@@ -365,3 +365,83 @@ export const mercadoApi = {
   organismos: (r: Rango, f: { q?: string | null; limit?: number; offset?: number }) =>
     pedir<{ total: number; filas: OrganismoFila[] }>(`/api/mercado/organismos${qs({ desde: r.desde, hasta: r.hasta, q: f.q, limit: f.limit ?? 100, offset: f.offset ?? 0 })}`),
 };
+
+// --- Analista (IA sobre las estadísticas) -----------------------------------
+
+export interface OportunidadIa {
+  producto: string;
+  articulo_id: number | null;
+  prioridad: 'alta' | 'media' | 'baja';
+  por_que: string;
+  precio_de_entrada: string | null;
+  competidores_a_vigilar: string[];
+  riesgos: string | null;
+}
+
+export interface InformeMercado {
+  resumen_ejecutivo: string;
+  oportunidades: OportunidadIa[];
+  tendencias: string[];
+  competencia: string[];
+  compradores_clave: string[];
+  alertas_de_datos: string[];
+  preguntas_abiertas: string[];
+}
+
+export interface AnalisisProducto {
+  veredicto: 'entrar' | 'explorar' | 'evitar';
+  confianza: number;
+  resumen: string;
+  precio_recomendado: { desde: number | null; hasta: number | null; unidad: string; justificacion: string };
+  a_quien_venderle: string[];
+  competidores: Array<{ nombre: string; por_que_importa: string }>;
+  como_ganar: string[];
+  riesgos: string[];
+  datos_faltantes: string[];
+}
+
+export interface RespuestaPregunta {
+  respuesta: string;
+  datos_usados: string[];
+  limitaciones: string[];
+  sugerencias: string[];
+}
+
+export interface InformeIa<T> {
+  id: number;
+  tipo: 'mercado' | 'producto' | 'pregunta';
+  clave: string;
+  filtros: unknown;
+  pregunta: string | null;
+  informe: T;
+  proveedor: string | null;
+  modelo: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  duracion_ms: number | null;
+  creado_en: string;
+  en_cache?: boolean;
+}
+
+export interface EstadoAnalisis<T> {
+  en_curso: boolean;
+  iniciado_en: string | null;
+  error: string | null;
+  informe: InformeIa<T> | null;
+}
+
+export interface FiltrosAnalisis extends Rango {
+  categoria: number | null;
+}
+
+const json = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+export const analistaApi = {
+  analisis: (f: FiltrosAnalisis) => pedir<EstadoAnalisis<InformeMercado>>(`/api/mercado/analisis${qs({ desde: f.desde, hasta: f.hasta, categoria: f.categoria })}`),
+  generarAnalisis: (f: FiltrosAnalisis) => pedir<{ iniciado: boolean }>('/api/mercado/analisis', json({ desde: f.desde ?? undefined, hasta: f.hasta ?? undefined, categoria: f.categoria ?? undefined })),
+  analisisProducto: (id: number, r: Rango) => pedir<EstadoAnalisis<AnalisisProducto>>(`/api/mercado/productos/${id}/analisis${qs({ desde: r.desde, hasta: r.hasta })}`),
+  generarAnalisisProducto: (id: number, r: Rango) => pedir<{ iniciado: boolean }>(`/api/mercado/productos/${id}/analisis`, json({ desde: r.desde ?? undefined, hasta: r.hasta ?? undefined })),
+  preguntar: (pregunta: string) => pedir<InformeIa<RespuestaPregunta>>('/api/mercado/preguntar', json({ pregunta })),
+  preguntas: (limit = 8) => pedir<InformeIa<RespuestaPregunta>[]>(`/api/mercado/preguntas${qs({ limit })}`),
+  salud: () => pedir<{ llm: { ok: boolean; proveedor: string; modelo: string; cargado: boolean; detalle?: string } }>('/api/health').catch(() => null),
+};

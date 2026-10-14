@@ -1,6 +1,6 @@
 # Módulo de mercado: referencia técnica
 
-Histórico de compras estatales de ARCE normalizado para responder qué se compra, a qué precio, quién gana y quién compra. El contexto y las decisiones están en [CAMBIO-DE-ENFOQUE.md](CAMBIO-DE-ENFOQUE.md). Este documento es la referencia para quien escriba el scraper, consulte la API o toque las estadísticas.
+Histórico de compras estatales de ARCE normalizado para responder qué se compra, a qué precio, quién gana y quién compra. El contexto y las decisiones están en [portfolio/CAMBIO-DE-ENFOQUE.md](portfolio/CAMBIO-DE-ENFOQUE.md). Este documento es la referencia para quien escriba el scraper, consulte la API o toque las estadísticas.
 
 ## 1. Flujo
 
@@ -169,7 +169,27 @@ Los endpoints de ranking (`productos`, `proveedores`, `organismos`, `categorias`
 | `GET /estado` | — | Refresco en curso, últimos refrescos y lotes |
 | `POST /refrescar` | `{ concurrente?: boolean }` | Dispara un refresco (202) |
 
-## 6. Operación
+## 6. El analista (IA sobre las estadísticas)
+
+`app/src/mercado/analista.ts`. Usa el proveedor de modelos del resto del sistema (`LLM_PROVIDER=ollama` con `OLLAMA_MODEL`, o `anthropic` con `ANTHROPIC_API_KEY`; interfaz `generarJson` con JSON Schema). El modelo no consulta la base: recibe un paquete de texto con las cifras y responde JSON validado con zod. Cada respuesta se guarda en `mercado.informes` con el paquete exacto que la originó.
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /api/mercado/analisis` `{ desde?, hasta?, categoria? }` → 202 | Lanza el informe del mercado (trabajo en segundo plano; uno por combinación de filtros) |
+| `GET /api/mercado/analisis?desde&hasta&categoria` | `{ en_curso, iniciado_en, error, informe }` con el último informe de esos filtros |
+| `POST /api/mercado/productos/:id/analisis` `{ desde?, hasta? }` → 202 · `GET …/analisis` | Veredicto por producto (entrar / explorar / evitar) |
+| `POST /api/mercado/preguntar` `{ pregunta }` | Respuesta en la misma llamada; la misma pregunta en 6 h vuelve de la base (`en_cache`) |
+| `GET /api/mercado/preguntas?limit` | Últimas preguntas respondidas |
+
+Paquetes de datos (texto, recortados al presupuesto del modelo: 60 k caracteres con Anthropic, ~60 % de `LLM_MAX_CHARS` con Ollama):
+
+- **Mercado**: cobertura y fuentes (avisa si hay datos sintéticos), monto total, cómo se compra, hasta 15 oportunidades con componentes del índice, cifras de 24 m, HHI, líder, precio mediano y percentiles, variaciones y cuadro comparativo; productos, proveedores y organismos por monto del período. Si no entra, se reducen filas por escalones.
+- **Producto**: totales del período, percentiles de precio, serie mensual, índice y componentes, quién gana y quién compra con cuotas, cuadros comparativos por año, cómo se compra, últimas adjudicaciones.
+- **Pregunta**: términos de la pregunta (palabras de 4+ letras sin conectores) → `buscar` → fichas de hasta 3 productos y 2 proveedores, más el paquete de mercado reducido.
+
+Esquemas de respuesta (`InformeMercadoSchema`, `AnalisisProductoSchema`, `RespuestaPreguntaSchema`): sin restricciones numéricas ni de largo en el JSON Schema (no todos los proveedores las aceptan); `validar*` recorta listas, acota la confianza a 0-100 y descarta ids de producto que no estén en el paquete. El prompt del sistema exige basarse solo en los datos, citar cifras, distinguir poder de mercado de volumen y advertir si los datos son sintéticos o parciales.
+
+## 7. Operación
 
 ```bash
 npm run mercado:demo                        # datos sintéticos por la API (necesita INGESTA_TOKEN y la app corriendo)
@@ -183,6 +203,6 @@ npm run test:db                             # tests incluyendo la integración c
 - **Cambios en las reglas de normalización**: editar `normalizar.ts`, correr `POST /api/ingesta/reprocesar` y esperar el refresco.
 - **Salud**: `GET /api/mercado/estado` y la sección "Salud de los datos" del panorama del dashboard (cobertura de precio y monto, ítems sin artículo, adjudicaciones excluidas, lotes rechazados).
 
-## 7. Pendientes
+## 8. Pendientes
 
-Ver la sección 5 de [CAMBIO-DE-ENFOQUE.md](CAMBIO-DE-ENFOQUE.md): el scraper del histórico, cotizaciones reales del BCU, el catálogo oficial de artículos, la clasificación de ítems sin código (posible uso de IA con salida estructurada), la calibración del índice con datos reales y la medición de escala.
+Ver la sección 5 de [portfolio/CAMBIO-DE-ENFOQUE.md](portfolio/CAMBIO-DE-ENFOQUE.md): el scraper del histórico, cotizaciones reales del BCU, el catálogo oficial de artículos, la clasificación de ítems sin código (posible uso de IA con salida estructurada), la calibración del índice con datos reales y la medición de escala.
